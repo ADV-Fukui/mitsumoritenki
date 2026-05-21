@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>見積転記アプリ v2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;background:#f0efe8;min-height:100vh;color:#1a1a1a}
+
+/* Layout */
+#mainApp{display:none}
+.topbar{background:#1a1a1a;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.topbar h1{font-size:15px;font-weight:500;letter-spacing:0.5px}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.top-btn{font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#fff;cursor:pointer}
+.top-btn:hover{background:rgba(255,255,255,0.1)}
+
+/* Steps */
+.steps{background:#fff;border-bottom:1px solid #e0dfd8;padding:0 24px;display:flex;gap:0}
+.step-tab{padding:12px 20px;font-size:13px;color:#aaa;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.step-tab.active{color:#1a1a1a;border-bottom-color:#1a1a1a;font-weight:500}
+.step-tab.done{color:#2d8f5a}
+
+.content{max-width:900px;margin:0 auto;padding:24px 16px}
+
+/* Cards */
+.card{background:#fff;border:1px solid #e0dfd8;border-radius:12px;padding:20px;margin-bottom:14px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:14px;color:#1a1a1a}
+.card-sub{font-size:12px;color:#888;margin-bottom:12px}
+
+/* API bar */
+.api-bar{background:#fff;border:1px solid #e0dfd8;border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.api-bar label{font-size:12px;color:#888;white-space:nowrap}
+.api-bar input{flex:1;min-width:160px;font-size:13px;border:1px solid #ddd;border-radius:6px;padding:6px 10px;font-family:monospace;color:#333}
+.api-bar button{font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+.api-saved{font-size:12px;color:#2d8f5a;display:none}
+
+/* Form */
+label{font-size:12px;color:#888;display:block;margin-bottom:4px}
+input[type=text],input[type=number],select,textarea{width:100%;font-size:14px;border:1px solid #ddd;border-radius:7px;padding:8px 10px;background:#fff;color:#1a1a1a;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#999}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.field{margin-bottom:12px}
+
+/* Drop zone */
+.drop-zone{border:1.5px dashed #ccc;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:background 0.15s}
+.drop-zone:hover,.drop-zone.drag{background:#f5f5f0;border-color:#999}
+.drop-zone p{font-size:13px;color:#888;margin-top:8px}
+.drop-zone span{font-size:11px;color:#bbb;margin-top:4px;display:block}
+.file-list{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.file-chip{display:flex;align-items:center;justify-content:space-between;font-size:12px;background:#f5f5f0;border:1px solid #e0dfd8;border-radius:7px;padding:7px 10px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:8px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#1a1a1a;cursor:pointer;transition:background 0.15s;font-family:inherit}
+.btn:hover{background:#f5f5f0}
+.btn.primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.btn.primary:hover{background:#333}
+.btn.success{background:#1a7a4a;color:#fff;border-color:#1a7a4a}
+.btn.danger-soft{border-color:#f0a0a0;color:#c0392b;background:#fff}
+.btn-row{display:flex;justify-content:space-between;align-items:center;margin-top:16px}
+.btn-group{display:flex;gap:8px}
+
+/* Sheet tabs */
+.sheet-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.sheet-tab{font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid #ddd;background:#fff;cursor:pointer;transition:all 0.15s}
+.sheet-tab.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.sheet-tab.has-warn{border-color:#f0c040}
+.sheet-tab.has-dup{border-color:#f08040}
+
+/* Item table */
+.item-table{width:100%;border-collapse:collapse;font-size:12px}
+.item-table th{font-weight:500;color:#888;padding:7px 6px;border-bottom:1px solid #eee;text-align:left;font-size:11px;white-space:nowrap;background:#faf9f5}
+.item-table td{padding:5px 4px;border-bottom:1px solid #f0f0f0;vertical-align:middle}
+.item-table tr:hover td{background:#faf9f5}
+td input,td select{font-size:12px;padding:3px 6px;border-radius:5px;border:1px solid #ddd;width:100%;background:#fff}
+td input:focus,td select:focus{outline:none;border-color:#999}
+
+/* Badges */
+.badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;white-space:nowrap;display:inline-block}
+.badge.ok{background:#eaf7f1;color:#1a7a4a}
+.badge.warn{background:#fff8d6;color:#c07700}
+.badge.dup{background:#fff0e0;color:#c05000}
+
+/* Move buttons */
+.move-btn{font-size:10px;padding:2px 6px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;color:#666}
+.move-btn:hover{background:#f0f0f0}
+
+/* Delete button */
+.del-btn{font-size:10px;padding:2px 6px;border:1px solid #f0a0a0;border-radius:4px;background:#fff;cursor:pointer;color:#c0392b;white-space:nowrap}
+.del-btn:hover{background:#fdf2f2}
+
+/* Loading */
+.loading-box{text-align:center;padding:32px}
+.spinner{width:28px;height:28px;border:2px solid #eee;border-top-color:#1a1a1a;border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-box p{font-size:13px;color:#888}
+
+/* Fixed total bar (Step 3) */
+#totalBar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e0dfd8;box-shadow:0 -2px 12px rgba(0,0,0,0.07);z-index:50;padding:10px 24px;display:none}
+#totalBar .inner{max-width:900px;margin:0 auto;display:flex;justify-content:flex-end;align-items:center;gap:20px;flex-wrap:wrap}
+.t-item{display:flex;gap:6px;align-items:baseline;font-size:13px;color:#888}
+.t-item strong{font-size:13px;font-weight:600;color:#1a1a1a}
+.t-item.main{border-left:1px solid #eee;padding-left:20px}
+.t-item.main strong{font-size:16px}
+
+/* Profit */
+.profit-section{margin-bottom:14px}
+.profit-global{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.profit-global label{font-size:13px;color:#555;white-space:nowrap;margin-bottom:0}
+.profit-global input{width:80px;font-size:14px}
+.profit-global select{width:100px;font-size:13px}
+.sheet-profit-list{display:flex;flex-direction:column;gap:6px}
+.sheet-profit-row{display:flex;align-items:center;gap:10px;font-size:13px}
+.sheet-profit-row span{min-width:140px;color:#555}
+.sheet-profit-row input{width:70px;font-size:13px}
+
+/* Summary grid */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.summary-card{background:#f5f5f0;border-radius:8px;padding:12px}
+.summary-card p:first-child{font-size:11px;color:#888;margin-bottom:4px}
+.summary-card p:last-child{font-size:15px;font-weight:600;color:#1a1a1a}
+
+.err{font-size:12px;color:#c0392b;padding:8px 12px;background:#fdf2f2;border-radius:7px;margin-top:8px;display:none}
+.hidden{display:none!important}
+.dl-done{font-size:13px;color:#2d8f5a;margin-left:10px;display:none}
+
+/* Sheet name editor */
+.sheet-name-list{display:flex;flex-direction:column;gap:8px}
+.sheet-name-row{display:flex;align-items:center;gap:10px}
+.sheet-key{font-size:13px;font-weight:600;color:#888;width:24px;text-align:center;background:#f0efe8;border-radius:4px;padding:4px 0;flex-shrink:0}
+
+/* Reconciliation panel */
+.recon-panel{background:#fff;border:1px solid #e0dfd8;border-radius:10px;padding:12px 16px;margin-bottom:14px}
+.recon-title{font-size:12px;font-weight:600;color:#555;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.recon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.recon-card{border-radius:8px;padding:10px 12px;font-size:12px;border:1px solid transparent}
+.recon-card.ok{background:#eaf7f1;border-color:#b8e8ce;color:#155a35}
+.recon-card.over{background:#fff0e0;border-color:#f0c090;color:#7a3300}
+.recon-card.under{background:#fff8d6;border-color:#f0d860;color:#5a4000}
+.recon-card .rc-sheet{font-weight:600;margin-bottom:4px}
+.recon-card .rc-row{display:flex;justify-content:space-between;margin-top:2px;font-size:11px;opacity:0.85}
+.recon-card .rc-diff{font-weight:700;margin-top:4px;font-size:12px}
+.recon-cover{display:flex;align-items:center;gap:10px;font-size:12px;padding:8px 12px;background:#f5f5f0;border-radius:7px;margin-bottom:8px}
+.recon-cover span{color:#888}
+.recon-cover strong{color:#1a1a1a}
+</style>
+</head>
+<body>
+
+<!-- Fixed total bar (Step 3のみ表示) -->
+<div id="totalBar">
+  <div class="inner">
+    <div class="t-item"><span>小計</span><strong id="subtotalDisp">¥0</strong></div>
+    <div class="t-item"><span>出精値引き</span><strong id="discountDisp">−¥0</strong></div>
+    <div class="t-item"><span>税抜合計</span><strong id="pretaxDisp">¥0</strong></div>
+    <div class="t-item"><span>消費税(10%)</span><strong id="taxDisp">¥0</strong></div>
+    <div class="t-item main"><span>税込合計</span><strong id="totalDisp">¥0</strong></div>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="mainApp" style="display:block">
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1>見積転記アプリ</h1>
+    </div>
+    <div class="topbar-right"></div>
+  </div>
+
+  <div class="steps" id="stepTabs">
+    <div class="step-tab active" onclick="goStep(0)">① 基本情報</div>
+    <div class="step-tab" onclick="goStep(1)">② PDF読込</div>
+    <div class="step-tab" onclick="goStep(2)">③ シート確認</div>
+    <div class="step-tab" onclick="goStep(3)">④ 内訳編集</div>
+    <div class="step-tab" onclick="goStep(4)">⑤ 利益率設定</div>
+    <div class="step-tab" onclick="goStep(5)">⑥ Excel出力</div>
+  </div>
+
+  <div class="content">
+    <div class="api-bar">
+      <label>Anthropic APIキー</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" oninput="saveKey()">
+      <span class="api-saved" id="keySaved">✓ 保存済み</span>
+    </div>
+
+    <!-- Step 0: 基本情報 -->
+    <div id="step0">
+      <div class="card">
+        <p class="card-title">案件情報</p>
+        <p class="card-sub">② PDF読込後に工事名・場所・工期は自動入力されます。先に入力しておくことも可能です。</p>
+        <div class="field"><label>工事名</label><input type="text" id="kojiName" placeholder="PDF読込後に自動入力"></div>
+        <div class="grid2">
+          <div class="field"><label>工事場所</label><input type="text" id="kojiPlace" placeholder="PDF読込後に自動入力"></div>
+          <div class="field"><label>工期</label><input type="text" id="koki" placeholder="PDF読込後に自動入力"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>見積番号</label><input type="text" id="estNo" placeholder="例：2026-001"></div>
+          <div class="field"><label>発注者</label><input type="text" id="kojiClient" placeholder="例：株式会社イトー"></div>
+        </div>
+        <div class="field"><label>出精値引き（円）</label><input type="number" id="discount" value="0" oninput="updateTotals()"></div>
+        <p style="font-size:11px;color:#bbb;margin-top:6px">※ 作成日はExcel出力時に自動設定されます</p>
+      </div>
+      <div class="btn-row"><span></span><button class="btn primary" onclick="goStep(1)">次へ →</button></div>
+    </div>
+
+    <!-- Step 1: PDF読込 -->
+    <div id="step1" class="hidden">
+      <div class="card">
+        <p class="card-title">見積書をアップロード</p>
+        <p class="card-sub">PDF・JPEG・PNG対応。複数社まとめてアップ可。会社名を設定してからアップしてください。</p>
+        <div id="vendorInputs" style="margin-bottom:14px"></div>
+        <button class="btn" onclick="addVendor()" style="margin-bottom:14px">＋ 業者を追加</button>
+        <div class="drop-zone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <div style="font-size:28px;opacity:0.4">📂</div>
+          <p>クリックまたはドラッグ＆ドロップ</p>
+          <span>PDF / JPEG / PNG</span>
+        </div>
+        <input type="file" id="fileInput" multiple accept="image/*,application/pdf" style="display:none" onchange="addFiles(this.files)">
+        <div class="file-list" id="fileList"></div>
+      </div>
+      <div id="loadingBox" class="card hidden"><div class="loading-box"><div class="spinner"></div><p id="loadingMsg">AIが見積書を読み取っています...</p></div></div>
+      <div class="err" id="errBox"></div>
+      <div class="btn-row">
+        <button class="btn" onclick="goStep(0)">← 戻る</button>
+        <button class="btn primary" onclick="runExtract()">AI読み取り開始</button>
+      </div>
+    </div>
+
+    <!-- Step 2: シート確認 -->
+    <div id="step2" class="hidden">
+      <div class="card">
+        <p class="card-title">工種シートの確認・修正</p>
+        <p class="card-sub">AIが検出した大項目です。シートキー（A〜）と名称を確認・修正してください。</p>
+        <div class="sheet-name-list" id="sheetNameList"></div>
+        <button class="btn" onclick="addSheet()" style="margin-top:10px">＋ シートを追加</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="goStep(1)">← 戻る</button>
+        <button class="btn primary" onclick="goStep(3)">内訳編集へ →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: 内訳編集 -->
+    <div id="step3" class="hidden" style="padding-bottom:80px">
+      <div class="card">
+        <p class="card-title">内訳の確認・修正</p>
+        <p class="card-sub">
+          <span style="background:#fff8d6;color:#c07700;font-size:11px;padding:2px 7px;border-radius:4px;font-weight:600">🟡 要確認</span>　金額ゼロ・別途項目
+          <span style="background:#fff0e0;color:#c05000;font-size:11px;padding:2px 7px;border-radius:4px;font-weight:600;margin-left:8px">🟠 重複候補</span>　複数社で類似項目あり
+        </p>
+        <div class="sheet-tabs" id="sheetTabs"></div>
+        <div id="reconcilePanel"></div>
+        <div style="overflow-x:auto">
+          <table class="item-table">
+            <thead>
+              <tr>
+                <th style="width:24px"></th>
+                <th style="width:130px">名称</th>
+                <th style="width:100px">摘要</th>
+                <th style="width:56px">数量</th>
+                <th style="width:40px">単位</th>
+                <th style="width:80px">単価</th>
+                <th style="width:90px">金額</th>
+                <th style="width:80px">業者名</th>
+                <th style="width:60px">シート移動</th>
+                <th style="width:50px">上下</th>
+                <th style="width:54px">状態</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="itemBody"></tbody>
+          </table>
+        </div>
+        <button class="btn" onclick="addItem()" style="margin-top:10px;font-size:12px">＋ 行を追加</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="goStep(2)">← 戻る</button>
+        <button class="btn primary" onclick="goStep(4)">利益率設定へ →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: 利益率設定 -->
+    <div id="step4" class="hidden">
+      <div class="card">
+        <p class="card-title">利益率設定</p>
+        <div class="profit-section">
+          <p style="font-size:13px;font-weight:500;margin-bottom:8px;color:#555">① 全体一律</p>
+          <div class="profit-global">
+            <label>利益率</label>
+            <input type="number" id="globalRate" value="20" min="0" max="100" step="0.1" oninput="applyGlobalRate()">
+            <span style="font-size:14px">%</span>
+            <label style="margin-left:8px">端数ラウンド</label>
+            <select id="roundUnit" onchange="applyGlobalRate()">
+              <option value="1">1円</option>
+              <option value="10">10円</option>
+              <option value="100" selected>100円</option>
+              <option value="1000">1,000円</option>
+            </select>
+          </div>
+        </div>
+        <div class="profit-section">
+          <p style="font-size:13px;font-weight:500;margin-bottom:8px;color:#555">② 工種別に上書き（任意）</p>
+          <div class="sheet-profit-list" id="sheetProfitList"></div>
+        </div>
+      </div>
+      <div class="card">
+        <p class="card-title">小項目別確認・手修正</p>
+        <p class="card-sub">売価を個別に修正できます。</p>
+        <div style="overflow-x:auto">
+          <table class="item-table">
+            <thead>
+              <tr>
+                <th>シート</th>
+                <th style="width:130px">名称</th>
+                <th style="width:80px">原価</th>
+                <th style="width:60px">率%</th>
+                <th style="width:90px">売価</th>
+                <th style="width:54px">状態</th>
+              </tr>
+            </thead>
+            <tbody id="profitBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="goStep(3)">← 戻る</button>
+        <button class="btn primary" onclick="goStep(5)">Excel出力へ →</button>
+      </div>
+    </div>
+
+    <!-- Step 5: Excel出力 -->
+    <div id="step5" class="hidden">
+      <div class="card">
+        <p class="card-title">Excel出力</p>
+        <div id="kojiSummary" style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.8"></div>
+        <div class="summary-grid" id="summaryCards"></div>
+
+        <!-- 再計算・再検証パネル -->
+        <div id="step5Recon" style="margin:14px 0"></div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;padding:12px;background:#f5f5f0;border-radius:8px;border:1px solid #e0dfd8">
+          <button class="btn" onclick="revalidate()">🔄 再計算・再検証</button>
+          <button class="btn" onclick="downloadBudgetExcel()">📊 予算管理ExcelをDL</button>
+        </div>
+
+        <div class="field" style="margin-bottom:16px;max-width:320px">
+          <label>表紙の金額表示</label>
+          <select id="taxMode">
+            <option value="excluded">税別表示（税抜金額を大きく表示・消費税を別途記載）</option>
+            <option value="included">税込表示（消費税込みの総合計を表示）</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:14px">
+          <label>仕上げ用テンプレートExcel（任意・選択すると表紙の書式をテンプレートから適用）</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+            <button class="btn" onclick="document.getElementById('tplFileInput').click()">📂 テンプレート選択</button>
+            <input type="file" id="tplFileInput" accept=".xlsx" style="display:none" onchange="loadTemplate(this)">
+            <span id="tplName" style="font-size:12px;color:#aaa">未選択（テンプレートなしでも出力できます）</span>
+            <button class="btn" id="tplClear" style="display:none;font-size:11px;padding:3px 8px" onclick="clearTemplate()">✕ 解除</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button class="btn success" onclick="downloadExcel()">⬇ Excelをダウンロード</button>
+          <span class="dl-done" id="dlDone">✓ ダウンロード完了！</span>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="goStep(4)">← 戻る</button>
+        <button class="btn" onclick="resetApp()">↺ 最初からやり直す</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let vendors = [{name:''}];
+let files = [];
+let sheets = [];
+let items = [];
+let reconciliation = []; // [{sheet, summaryAmount, detailSum, diff}]
+let coverTotal = 0;
+let currentStep = 0;
+let activeSheet = '';
+let _templateBuffer = null; // 仕上げ用Excelテンプレート（ArrayBuffer）
+
+// --- API Key ---
+function loadApiKey(){
+  try{const s=localStorage.getItem('anthropic_api_key');if(s){document.getElementById('apiKey').value=s;document.getElementById('keySaved').style.display='inline';}}catch(e){}
+}
+function saveKey(){
+  const k=document.getElementById('apiKey').value.trim();
+  if(k){try{localStorage.setItem('anthropic_api_key',k);document.getElementById('keySaved').style.display='inline';}catch(e){}}
+}
+
+// ページ読込時に初期化
+window.addEventListener('DOMContentLoaded',()=>{ loadApiKey(); renderVendors(); });
+
+// --- Steps ---
+function goStep(n){
+  document.getElementById('step'+currentStep).classList.add('hidden');
+  currentStep=n;
+  document.getElementById('step'+n).classList.remove('hidden');
+  document.querySelectorAll('.step-tab').forEach((el,i)=>{
+    el.classList.remove('active','done');
+    if(i<n) el.classList.add('done');
+    else if(i===n) el.classList.add('active');
+  });
+  // 合計バーはStep3のみ表示
+  document.getElementById('totalBar').style.display=(n===3)?'flex':'none';
+  if(n===2) renderSheetNames();
+  if(n===3){
+    if(sheets.length>0&&(!activeSheet||!sheets.find(s=>s.key===activeSheet))) activeSheet=sheets[0].key;
+    renderSheetTabs(); renderItemTable(); updateTotals(); renderReconciliation();
+  }
+  if(n===4){ renderSheetProfitList(); applyGlobalRate(); }
+  if(n===5){ renderSummary(); revalidate(); }
+}
+
+// --- Vendors ---
+function renderVendors(){
+  const c=document.getElementById('vendorInputs');
+  c.innerHTML='';
+  vendors.forEach((v,i)=>{
+    const d=document.createElement('div');
+    d.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:6px';
+    d.innerHTML=`<label style="font-size:12px;color:#888;white-space:nowrap;margin-bottom:0">業者${i+1}名</label><input type="text" value="${esc(v.name)}" placeholder="例：株式会社ガイアート" oninput="vendors[${i}].name=this.value" style="flex:1;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px">${vendors.length>1?`<button class="btn danger-soft" style="padding:4px 10px;font-size:11px" onclick="removeVendor(${i})">削除</button>`:''}`;
+    c.appendChild(d);
+  });
+}
+function addVendor(){ vendors.push({name:''}); renderVendors(); }
+function removeVendor(i){ vendors.splice(i,1); renderVendors(); }
+
+// --- Files ---
+function addFiles(fl){
+  Array.from(fl).forEach(f=>{if(!files.find(x=>x.name===f.name))files.push(f);});
+  renderFileList();
+}
+function renderFileList(){
+  const c=document.getElementById('fileList');c.innerHTML='';
+  files.forEach((f,i)=>{
+    const d=document.createElement('div');d.className='file-chip';
+    d.innerHTML=`<span>📄 ${esc(f.name)}</span><button onclick="removeFile(${i})" style="font-size:11px;padding:2px 8px;border:1px solid #f0a0a0;border-radius:5px;background:#fff;color:#c0392b;cursor:pointer">削除</button>`;
+    c.appendChild(d);
+  });
+}
+function removeFile(i){ files.splice(i,1); renderFileList(); }
+async function fileToBase64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=()=>rej(new Error('read failed')); r.readAsDataURL(file); }); }
+
+// --- Extract ---
+function showErr(msg){ const b=document.getElementById('errBox'); b.textContent=msg; b.style.display='block'; }
+
+async function runExtract(){
+  const apiKey=document.getElementById('apiKey').value.trim();
+  if(!apiKey){ showErr('Anthropic APIキーを入力してください'); return; }
+  if(!files.length){ showErr('ファイルをアップロードしてください'); return; }
+  document.getElementById('errBox').style.display='none';
+  document.getElementById('loadingBox').classList.remove('hidden');
+  document.getElementById('loadingMsg').textContent='AIが見積書を読み取っています...';
+
+  const vendorNames=vendors.map((v,i)=>v.name||`業者${i+1}`);
+
+  const msgContent=[];
+  for(const f of files){
+    const b64=await fileToBase64(f);
+    const mt=f.type==='application/pdf'?'application/pdf':(f.type||'image/jpeg');
+    if(mt==='application/pdf') msgContent.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}});
+    else msgContent.push({type:'image',source:{type:'base64',media_type:mt,data:b64}});
+  }
+
+  const prompt = [
+    'あなたは日本の建設工事見積書を読み取るシステムです。',
+    '以下のJSON形式のみで返答してください。他のテキストは一切不要です。',
+    '',
+    '【見積書の3層構造と3段階クロスチェック】',
+    '',
+    '■ STEP1：1枚目（表紙）',
+    '- 税抜合計金額（値引き前）を読み取り coverTotal に記録する',
+    '- 税込金額・消費税は除く。税抜の工事金額合計を使う',
+    '- 工事名・工事場所・工期も読み取り projectInfo に記録する',
+    '',
+    '■ STEP2：2枚目（大内訳）',
+    '- 大項目名と各金額を summaryItems として抽出する',
+    '- 各大項目に対してシートキー（A・B・C…）を割り当て sheets を生成する',
+    '- summaryItems の合計が coverTotal と一致するか確認する（値引き項目がある場合はその分を差し引く）',
+    '',
+    '■ STEP3：3枚目以降（小項目明細）',
+    '- 各大項目に対応する小項目明細を抽出し detailItems を生成する',
+    '- 各シートの detailItems 合計（detailSum）を計算し、対応する summaryItems の金額（summaryAmount）と照合する',
+    '- detailSum > summaryAmount の場合（超過）：',
+    '    超過の原因と思われる項目（意味的に重複している項目、同一内容が複数ある項目）に status:"dup" を付ける',
+    '- detailSum < summaryAmount の場合（不足）：',
+    '    金額が特に大きく未確認の項目や金額ゼロ項目に status:"warn" を付ける',
+    '- 金額ゼロ・「別途」「別途協議」と記載された項目は必ず status:"warn"',
+    '- 複数社の見積で意味的に同じ項目（例：「現場管理費」と「管理費」）は status:"dup"',
+    '- 上記に該当しない通常項目 → status:"ok"',
+    '',
+    '【必ず除外する行（集計行）】',
+    '次の行はdetailItemsに含めない：',
+    '「小計」「合計」「工事価格」「総合計」「直接工事費合計」「税込合計」「消費税」「諸経費合計」',
+    '',
+    '【業者名の対応】',
+    '業者名一覧：' + vendorNames.join('、'),
+    '各detailItemのvendorフィールドには上記のいずれかを設定する。',
+    '',
+    '【返答形式（JSONのみ・コードブロック不要）】',
+    '{',
+    '  "coverTotal": 0,',
+    '  "projectInfo": {"kojiName":"工事名","kojiPlace":"工事場所","koki":"工期（例：令和8年6月〜令和8年9月）"},',
+    '  "sheets": [{"key":"A","name":"工種名（日本語）"}],',
+    '  "summaryItems": [{"name":"大項目名","amount":0,"sheet":"A"}],',
+    '  "detailItems": [{"name":"名称","memo":"摘要","qty":0,"unit":"式","unitPrice":0,"amount":0,"sheet":"A","vendor":"業者名","status":"ok"}],',
+    '  "reconciliation": [{"sheet":"A","summaryAmount":0,"detailSum":0,"diff":0}]',
+    '}',
+    '',
+    'diff = detailSum - summaryAmount（プラスなら超過＝重複の疑い、マイナスなら不足）'
+  ].join('\n');
+  msgContent.push({type:'text', text: prompt});
+
+  try{
+    // ASCII以外の文字（コピー時の不可視文字など）を除去してからヘッダーにセット
+    const cleanKey = apiKey.replace(/[^\x20-\x7E]/g,'').trim();
+    const reqHeaders = new Headers();
+    reqHeaders.append('Content-Type','application/json');
+    reqHeaders.append('x-api-key', cleanKey);
+    reqHeaders.append('anthropic-version','2023-06-01');
+    reqHeaders.append('anthropic-dangerous-direct-browser-access','true');
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers: reqHeaders,
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:16000,messages:[{role:'user',content:msgContent}]})
+    });
+    const data=await resp.json();
+    if(data.error) throw new Error(data.error.message);
+    const text=data.content.map(x=>x.text||'').join('');
+    // コードブロックや前後テキストを除去してJSONだけ取り出す
+    let jsonStr=text.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, '$1');
+    // JSON文字列内のリテラル改行・制御文字を正しくエスケープ（AIが返すことがある）
+    jsonStr=(()=>{
+      let r='',inStr=false,esc=false;
+      for(let i=0;i<jsonStr.length;i++){
+        const c=jsonStr[i];
+        if(esc){r+=c;esc=false;continue;}
+        if(c==='\\'){r+=c;esc=true;continue;}
+        if(c==='"'){inStr=!inStr;r+=c;continue;}
+        if(inStr){
+          if(c==='\n'){r+='\\n';continue;}
+          if(c==='\r'){r+='\\r';continue;}
+          if(c==='\t'){r+='\\t';continue;}
+          if(c<' '){continue;} // その他の制御文字は除去
+        }
+        r+=c;
+      }
+      return r;
+    })();
+    const parsed=JSON.parse(jsonStr);
+    sheets=parsed.sheets||[];
+    items=(parsed.detailItems||[]).map(it=>({...it,sellPrice:it.amount,profitRate:20}));
+    coverTotal=parsed.coverTotal||0;
+    reconciliation=parsed.reconciliation||[];
+    // 案件情報を自動入力（既入力がある場合は上書き確認なしで更新）
+    if(parsed.projectInfo){
+      const pi=parsed.projectInfo;
+      if(pi.kojiName) document.getElementById('kojiName').value=pi.kojiName;
+      if(pi.kojiPlace) document.getElementById('kojiPlace').value=pi.kojiPlace;
+      if(pi.koki) document.getElementById('koki').value=pi.koki;
+    }
+    activeSheet=''; // 再読込時にリセット
+    document.getElementById('loadingBox').classList.add('hidden');
+    goStep(2);
+  }catch(e){
+    document.getElementById('loadingBox').classList.add('hidden');
+    showErr('読み取りに失敗しました：'+(e.message||'不明なエラー'));
+  }
+}
+
+// --- Reconciliation ---
+function renderReconciliation(){
+  const panel=document.getElementById('reconcilePanel');
+  if(!reconciliation.length&&!coverTotal){ panel.innerHTML=''; return; }
+
+  // 現在のdetailItemsからリアルタイムで集計（手修正後も反映）
+  const liveRecon=sheets.map(s=>{
+    const detailSum=items.filter(it=>it.sheet===s.key).reduce((a,it)=>a+(+it.amount||0),0);
+    const base=reconciliation.find(r=>r.sheet===s.key);
+    const summaryAmount=base?base.summaryAmount:0;
+    const diff=detailSum-summaryAmount;
+    return {sheet:s.key,name:s.name,summaryAmount,detailSum,diff};
+  });
+
+  let html='<div class="recon-panel">';
+  html+='<div class="recon-title">📊 整合性チェック（大内訳 vs 明細合計）';
+  if(coverTotal>0) html+=`<span style="margin-left:auto;font-weight:400;color:#888">表紙合計：<strong style="color:#1a1a1a">¥${fmt(coverTotal)}</strong></span>`;
+  html+='</div>';
+  html+='<div class="recon-grid">';
+
+  liveRecon.forEach(r=>{
+    const cls=r.diff===0?'ok':r.diff>0?'over':'under';
+    const icon=r.diff===0?'✅':r.diff>0?'🟠':'🟡';
+    const diffLabel=r.diff===0?'一致':r.diff>0?`超過 +¥${fmt(r.diff)}`:`不足 −¥${fmt(Math.abs(r.diff))}`;
+    const msg=r.diff>0?'重複計上の可能性あり':r.diff<0?'未読取り項目の可能性あり':'';
+    html+=`<div class="recon-card ${cls}">
+      <div class="rc-sheet">${icon} ${esc(r.sheet)}：${esc(r.name)}</div>
+      <div class="rc-row"><span>大内訳</span><span>¥${fmt(r.summaryAmount)}</span></div>
+      <div class="rc-row"><span>明細合計</span><span>¥${fmt(r.detailSum)}</span></div>
+      <div class="rc-diff">${diffLabel}</div>
+      ${msg?`<div style="font-size:10px;margin-top:2px;opacity:0.8">${msg}</div>`:''}
+    </div>`;
+  });
+
+  html+='</div></div>';
+  panel.innerHTML=html;
+}
+
+// --- Sheet Names ---
+function renderSheetNames(){
+  const c=document.getElementById('sheetNameList');c.innerHTML='';
+  sheets.forEach((s,i)=>{
+    const d=document.createElement('div');d.className='sheet-name-row';
+    d.innerHTML=`<div class="sheet-key">${esc(s.key)}</div><input type="text" value="${esc(s.name)}" oninput="sheets[${i}].name=this.value" placeholder="工種名" style="flex:1;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px">${sheets.length>1?`<button class="btn danger-soft" style="padding:4px 10px;font-size:11px" onclick="removeSheet(${i})">削除</button>`:''}`;
+    c.appendChild(d);
+  });
+}
+function addSheet(){
+  const keys='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const used=sheets.map(s=>s.key);
+  const nextKey=keys.split('').find(k=>!used.includes(k))||'Z';
+  sheets.push({key:nextKey,name:''});
+  renderSheetNames();
+}
+function removeSheet(i){
+  const removedKey=sheets[i].key;
+  sheets.splice(i,1);
+  // 削除されたシートのアイテムを先頭シートへ移動
+  if(sheets.length>0){
+    items.filter(it=>it.sheet===removedKey).forEach(it=>it.sheet=sheets[0].key);
+  }
+  renderSheetNames();
+}
+
+// --- Item Table ---
+function renderSheetTabs(){
+  const c=document.getElementById('sheetTabs');c.innerHTML='';
+  sheets.forEach(s=>{
+    const btn=document.createElement('button');
+    btn.className='sheet-tab'+(activeSheet===s.key?' active':'');
+    const si=items.filter(it=>it.sheet===s.key);
+    if(si.some(it=>it.status==='dup')) btn.classList.add('has-dup');
+    else if(si.some(it=>it.status==='warn')) btn.classList.add('has-warn');
+    btn.textContent=`${s.key}：${s.name}`;
+    btn.onclick=()=>{ activeSheet=s.key; renderSheetTabs(); renderItemTable(); };
+    c.appendChild(btn);
+  });
+}
+
+function renderItemTable(){
+  const tbody=document.getElementById('itemBody');tbody.innerHTML='';
+  const sheetItems=items.filter(it=>it.sheet===activeSheet);
+
+  sheetItems.forEach((it,si)=>{
+    const gi=items.indexOf(it);
+    const tr=document.createElement('tr');
+    const badgeClass=it.status==='dup'?'dup':it.status==='warn'?'warn':'ok';
+    const badgeText=it.status==='dup'?'🟠重複候補':it.status==='warn'?'🟡要確認':'✅OK';
+    const sheetOpts=sheets.map(s=>`<option value="${s.key}"${it.sheet===s.key?' selected':''}>${s.key}:${esc(s.name)}</option>`).join('');
+    tr.innerHTML=`
+      <td style="text-align:center;color:#bbb;font-size:11px">${si+1}</td>
+      <td><input type="text" value="${esc(it.name)}" oninput="items[${gi}].name=this.value"></td>
+      <td><input type="text" value="${esc(it.memo)}" oninput="items[${gi}].memo=this.value"></td>
+      <td><input type="number" value="${it.qty||0}" oninput="items[${gi}].qty=+this.value;items[${gi}].amount=items[${gi}].qty*items[${gi}].unitPrice;updateTotals()" style="width:52px"></td>
+      <td><input type="text" value="${esc(it.unit)}" oninput="items[${gi}].unit=this.value" style="width:36px"></td>
+      <td><input type="number" value="${it.unitPrice||0}" oninput="items[${gi}].unitPrice=+this.value;items[${gi}].amount=items[${gi}].qty*items[${gi}].unitPrice;updateTotals()" style="width:78px"></td>
+      <td><input type="number" value="${it.amount||0}" oninput="items[${gi}].amount=+this.value;updateTotals()" style="width:88px"></td>
+      <td><input type="text" value="${esc(it.vendor)}" oninput="items[${gi}].vendor=this.value" style="width:78px"></td>
+      <td><select style="width:76px;font-size:11px" onchange="moveItemSheet(${gi},this.value)">${sheetOpts}</select></td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <button class="move-btn" onclick="moveItemUp(${gi})">▲</button>
+          <button class="move-btn" onclick="moveItemDown(${gi})">▼</button>
+        </div>
+      </td>
+      <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+      <td><button class="del-btn" onclick="deleteItem(${gi})">削除</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function addItem(){
+  const defaultVendor=vendors[0]?.name||'';
+  items.push({name:'',memo:'',qty:1,unit:'式',unitPrice:0,amount:0,sheet:activeSheet,vendor:defaultVendor,status:'ok',sellPrice:0,profitRate:20});
+  renderItemTable();
+  updateTotals();
+}
+
+function deleteItem(gi){
+  items.splice(gi,1);
+  renderItemTable();
+  updateTotals();
+}
+
+function moveItemSheet(gi,newSheet){
+  items[gi].sheet=newSheet;
+  activeSheet=newSheet;
+  renderSheetTabs();
+  renderItemTable();
+  updateTotals();
+}
+
+function moveItemUp(gi){
+  const sheet=items[gi].sheet;
+  const sheetItems=items.filter(it=>it.sheet===sheet);
+  const si=sheetItems.indexOf(items[gi]);
+  if(si===0) return;
+  const prevGi=items.indexOf(sheetItems[si-1]);
+  [items[gi],items[prevGi]]=[items[prevGi],items[gi]];
+  renderItemTable();
+}
+
+function moveItemDown(gi){
+  const sheet=items[gi].sheet;
+  const sheetItems=items.filter(it=>it.sheet===sheet);
+  const si=sheetItems.indexOf(items[gi]);
+  if(si===sheetItems.length-1) return;
+  const nextGi=items.indexOf(sheetItems[si+1]);
+  [items[gi],items[nextGi]]=[items[nextGi],items[gi]];
+  renderItemTable();
+}
+
+function fmt(n){ return Math.round(+n||0).toLocaleString('ja-JP'); }
+
+function getReiwaDate(){
+  const d=new Date();
+  return `令和${d.getFullYear()-2018}年${d.getMonth()+1}月${d.getDate()}日`;
+}
+
+// &を最初にエスケープしてから他を処理する（順序重要）
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function updateTotals(){
+  const sub=items.reduce((s,it)=>s+(+it.amount||0),0);
+  const disc=+(document.getElementById('discount').value)||0;
+  const pretax=sub-disc; const tax=Math.round(pretax*0.1); const total=pretax+tax;
+  document.getElementById('subtotalDisp').textContent='¥'+fmt(sub);
+  document.getElementById('discountDisp').textContent='−¥'+fmt(disc);
+  document.getElementById('pretaxDisp').textContent='¥'+fmt(pretax);
+  document.getElementById('taxDisp').textContent='¥'+fmt(tax);
+  document.getElementById('totalDisp').textContent='¥'+fmt(total);
+}
+
+// --- Profit ---
+function roundTo(val,unit){ return Math.round(val/unit)*unit; }
+
+// Step4遷移時に自動実行 → 売価の初期値が原価と同じのまま出力されるバグを防ぐ
+function applyGlobalRate(){
+  const rate=+(document.getElementById('globalRate').value)||0;
+  const unit=+(document.getElementById('roundUnit').value)||1;
+  items.forEach(it=>{ it.profitRate=rate; it.sellPrice=roundTo(it.amount*(1+rate/100),unit); });
+  renderProfitTable();
+}
+
+function renderSheetProfitList(){
+  const c=document.getElementById('sheetProfitList');c.innerHTML='';
+  sheets.forEach((s)=>{
+    const d=document.createElement('div');d.className='sheet-profit-row';
+    d.innerHTML=`<span>${esc(s.key)}：${esc(s.name)}</span><input type="number" placeholder="全体と同じ" min="0" max="100" step="0.1" oninput="applySheetRate('${s.key}',+this.value)" style="width:70px;font-size:13px;padding:5px 8px;border:1px solid #ddd;border-radius:6px"><span style="color:#888">%</span>`;
+    c.appendChild(d);
+  });
+}
+
+function applySheetRate(sheetKey,rate){
+  const unit=+(document.getElementById('roundUnit').value)||1;
+  items.filter(it=>it.sheet===sheetKey).forEach(it=>{ it.profitRate=rate; it.sellPrice=roundTo(it.amount*(1+rate/100),unit); });
+  renderProfitTable();
+}
+
+function renderProfitTable(){
+  const tbody=document.getElementById('profitBody');tbody.innerHTML='';
+  items.forEach((it,gi)=>{
+    const s=sheets.find(s=>s.key===it.sheet);
+    const tr=document.createElement('tr');
+    const badgeClass=it.status==='dup'?'dup':it.status==='warn'?'warn':'ok';
+    tr.innerHTML=`
+      <td style="font-size:11px;color:#888">${esc(it.sheet)}:${esc(s?s.name:'')}</td>
+      <td style="font-size:12px">${esc(it.name)}</td>
+      <td style="text-align:right;font-size:12px">¥${fmt(it.amount)}</td>
+      <td><input type="number" value="${it.profitRate||0}" step="0.1" oninput="updateItemProfit(${gi},+this.value)" style="width:56px;font-size:12px;padding:3px 5px"></td>
+      <td><input type="number" value="${it.sellPrice||0}" oninput="items[${gi}].sellPrice=+this.value" style="width:88px;font-size:12px;padding:3px 5px"></td>
+      <td><span class="badge ${badgeClass}">${it.status==='dup'?'🟠重複':it.status==='warn'?'🟡確認':'✅'}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateItemProfit(gi,rate){
+  const unit=+(document.getElementById('roundUnit').value)||1;
+  items[gi].profitRate=rate;
+  items[gi].sellPrice=roundTo(items[gi].amount*(1+rate/100),unit);
+  renderProfitTable();
+}
+
+// --- Summary ---
+function renderSummary(){
+  const name=document.getElementById('kojiName').value;
+  const place=document.getElementById('kojiPlace').value;
+  const client=document.getElementById('kojiClient').value;
+  const estNo=document.getElementById('estNo').value;
+  const koki=document.getElementById('koki').value;
+  document.getElementById('kojiSummary').innerHTML=
+    `<strong>${esc(name)}</strong>　${esc(place)}<br>工期：${esc(koki)}　発注者：${esc(client)}　見積番号：${esc(estNo)}　作成日：${getReiwaDate()}`;
+  const c=document.getElementById('summaryCards');c.innerHTML='';
+  const disc=+(document.getElementById('discount').value)||0;
+  const totalSell=items.reduce((a,it)=>a+(+it.sellPrice||0),0);
+  const totalCost=items.reduce((a,it)=>a+(+it.amount||0),0);
+  const pretax=totalSell-disc; const tax=Math.round(pretax*0.1);
+
+  const cards=[
+    {label:'合計原価',val:'¥'+fmt(totalCost)},
+    {label:'合計売価（税抜）',val:'¥'+fmt(pretax)},
+    {label:'消費税(10%)',val:'¥'+fmt(tax)},
+    {label:'税込合計',val:'¥'+fmt(pretax+tax)},
+    {label:'粗利額',val:'¥'+fmt(totalSell-totalCost)},
+    {label:'粗利率',val:totalSell>0?((totalSell-totalCost)/totalSell*100).toFixed(1)+'%':'0%'},
+  ];
+  cards.forEach(card=>{
+    const d=document.createElement('div');d.className='summary-card';
+    d.innerHTML=`<p>${card.label}</p><p>${card.val}</p>`;
+    c.appendChild(d);
+  });
+  sheets.forEach(s=>{
+    const sum=items.filter(it=>it.sheet===s.key).reduce((a,it)=>a+(+it.sellPrice||0),0);
+    const d=document.createElement('div');d.className='summary-card';
+    d.innerHTML=`<p>${esc(s.key)}：${esc(s.name)}</p><p>¥${fmt(sum)}</p>`;
+    c.appendChild(d);
+  });
+}
+
+// --- 再計算・再検証 ---
+function revalidate() {
+  renderSummary(); // サマリーカードを最新値で更新
+
+  const disc     = +(document.getElementById('discount').value) || 0;
+  const totalSell = items.reduce((a,it)=>a+(+it.sellPrice||0),0);
+  const pretax   = totalSell - disc;
+  const tax      = Math.floor(pretax * 0.1);
+  const grand    = pretax + tax;
+
+  const panel = document.getElementById('step5Recon');
+  if (!sheets.length) { panel.innerHTML=''; return; }
+
+  let issues = [];
+  let html = '<div style="background:#fafaf8;border:1px solid #e0dfd8;border-radius:8px;padding:12px">';
+  html += '<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:10px">🔍 シート別売価チェック</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;margin-bottom:10px">';
+
+  sheets.forEach(s=>{
+    const si = items.filter(it=>it.sheet===s.key);
+    const shSell = si.reduce((a,it)=>a+(+it.sellPrice||0),0);
+    const warn = si.length===0 || shSell<=0;
+    if(warn) issues.push(s.key);
+    html+=`<div style="background:${warn?'#fff8d6':'#f0faf5'};border:1px solid ${warn?'#f0c040':'#b8e4cc'};border-radius:6px;padding:8px">
+      <div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.key)}：${esc(s.name)}</div>
+      <div style="font-size:14px;font-weight:700;margin-top:2px">¥${fmt(shSell)}</div>
+      <div style="font-size:10px;color:#aaa">${si.length}件 ${warn?'⚠':''}</div>
+    </div>`;
+  });
+  html += '</div>';
+
+  // 照合チェック（大内訳抽出値 vs 明細売価）
+  if (reconciliation.length) {
+    const liveR = sheets.map(s=>{
+      const detailSell = items.filter(it=>it.sheet===s.key).reduce((a,it)=>a+(+it.sellPrice||0),0);
+      const base = reconciliation.find(r=>r.sheet===s.key);
+      const ext = base ? base.summaryAmount : null;
+      return {key:s.key, name:s.name, ext, detailSell};
+    }).filter(r=>r.ext!==null);
+
+    if (liveR.length) {
+      html += '<div style="font-size:11px;color:#888;margin-bottom:6px;margin-top:4px">📊 抽出値との照合（大内訳抽出 vs 現在の明細売価）</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px">';
+      liveR.forEach(r=>{
+        const diff = r.detailSell - r.ext;
+        const ok = Math.abs(diff) < 1;
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 6px;background:${ok?'#f0faf5':'#fff8d6'};border-radius:4px">
+          <span style="color:#555">${esc(r.key)}：${esc(r.name)}</span>
+          <span>${ok?'✅':'⚠'} 抽出¥${fmt(r.ext)} → 現在¥${fmt(r.detailSell)}${diff!==0?' ('+(diff>0?'+':'')+fmt(diff)+')':''}</span>
+        </div>`;
+      });
+      html += '</div>';
+    }
+  }
+
+  if (issues.length) {
+    html += `<div style="margin-top:8px;font-size:12px;color:#c07700">⚠ ${issues.join('・')} シートに項目がないか金額が0です</div>`;
+  } else {
+    html += `<div style="margin-top:8px;font-size:12px;color:#1a7a4a;font-weight:600">✅ 問題なし　税込総合計：¥${fmt(grand)}</div>`;
+  }
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+// --- 予算管理Excel（原価vs売価、粗利分析）DL ---
+function downloadBudgetExcel() {
+  if (!items.length) { alert('明細項目がありません'); return; }
+
+  const kojiName   = document.getElementById('kojiName').value   || '見積書';
+  const kojiClient = document.getElementById('kojiClient').value || '';
+  const kojiPlace  = document.getElementById('kojiPlace').value  || '';
+
+  // ─── 工種別集計データを作成 ───
+  const sheetSummary = sheets.map((s, i) => {
+    const si    = items.filter(it => it.sheet === s.key);
+    const cost  = si.reduce((a, it) => a + (+it.amount    || 0), 0);
+    const sell  = si.reduce((a, it) => a + (+it.sellPrice || +it.amount || 0), 0);
+    const profit = sell - cost;
+    const rate   = sell > 0 ? profit/sell : 0;
+    return { no:i+1, name:s.name, key:s.key, count:si.length, cost, sell, profit, rate };
+  });
+  const grandCost   = sheetSummary.reduce((a, x) => a + x.cost,   0);
+  const grandSell   = sheetSummary.reduce((a, x) => a + x.sell,   0);
+  const grandProfit = grandSell - grandCost;
+  const grandRate   = grandSell > 0 ? grandProfit/grandSell : 0;
+
+  const wb = XLSX.utils.book_new();
+  const setFmt = (ws, ref, z) => { if (ws[ref]) ws[ref].z = z; };
+  const NUM = '#,##0;[Red](#,##0);-';
+  const PCT = '0.0%;[Red](0.0%);-';
+
+  // ═══════════════════════════════════════
+  // シート1: 工種別集計
+  // ═══════════════════════════════════════
+  {
+    const aoa = [
+      ['予算管理表'],
+      [`工事名: ${kojiName}`, '', '', '', '', `客先: ${kojiClient}`],
+      [`場所: ${kojiPlace}`,  '', '', '', '', `作成日: ${new Date().toLocaleDateString('ja-JP')}`],
+      [],
+      ['No.', '工種', '項目数', '原価合計', '売価合計', '粗利', '粗利率'],
+    ];
+    sheetSummary.forEach(s => {
+      aoa.push([s.no, s.name, s.count, s.cost, s.sell, s.profit, s.rate]);
+    });
+    aoa.push([]);
+    aoa.push(['', '【総合計】', items.length, grandCost, grandSell, grandProfit, grandRate]);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:5},{wch:24},{wch:8},{wch:14},{wch:14},{wch:14},{wch:10}];
+
+    // 数値書式を適用
+    const dataStart = 6;  // 5行ヘッダー + 1
+    sheetSummary.forEach((_, i) => {
+      const r = dataStart + i;
+      setFmt(ws, `D${r}`, NUM);
+      setFmt(ws, `E${r}`, NUM);
+      setFmt(ws, `F${r}`, NUM);
+      setFmt(ws, `G${r}`, PCT);
+    });
+    const totalRow = dataStart + sheetSummary.length + 1;
+    setFmt(ws, `D${totalRow}`, NUM);
+    setFmt(ws, `E${totalRow}`, NUM);
+    setFmt(ws, `F${totalRow}`, NUM);
+    setFmt(ws, `G${totalRow}`, PCT);
+
+    XLSX.utils.book_append_sheet(wb, ws, '工種別集計');
+  }
+
+  // ═══════════════════════════════════════
+  // シート2: 全項目明細
+  // ═══════════════════════════════════════
+  {
+    const aoa = [
+      ['No.', '工種', '名称', '摘要', '数量', '単位', '原価単価', '原価金額', '売価金額', '粗利', '粗利率', '業者'],
+    ];
+    let n = 0;
+    sheets.forEach(s => {
+      const si = items.filter(it => it.sheet === s.key);
+      si.forEach(it => {
+        n++;
+        const cost = +it.amount || 0;
+        const sell = +it.sellPrice || cost;
+        const profit = sell - cost;
+        const rate = sell > 0 ? profit/sell : 0;
+        aoa.push([
+          n, s.name, it.name || '', it.memo || '',
+          +it.qty || 0, it.unit || '',
+          +it.unitPrice || 0, cost, sell, profit, rate,
+          it.vendor || ''
+        ]);
+      });
+    });
+    aoa.push([]);
+    aoa.push(['', '【総合計】', '', '', '', '', '', grandCost, grandSell, grandProfit, grandRate, '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:5},{wch:18},{wch:24},{wch:22},{wch:6},{wch:6},{wch:11},{wch:13},{wch:13},{wch:13},{wch:8},{wch:14}];
+    // 数値・パーセント書式
+    for (let r = 2; r <= aoa.length; r++) {
+      ['E','G','H','I','J'].forEach(col => setFmt(ws, `${col}${r}`, NUM));
+      setFmt(ws, `K${r}`, PCT);
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, '明細');
+  }
+
+  // ─── ダウンロード ───
+  XLSX.writeFile(wb, `予算_${kojiName||'見積書'}.xlsx`);
+}
+
+// --- テンプレート読み込み ---
+function loadTemplate(input) {
+  const f = input.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _templateBuffer = e.target.result;
+    document.getElementById('tplName').textContent = `📋 ${f.name}`;
+    document.getElementById('tplName').style.color = '#2d8f5a';
+    document.getElementById('tplClear').style.display = 'inline';
+  };
+  reader.readAsArrayBuffer(f);
+}
+function clearTemplate() {
+  _templateBuffer = null;
+  document.getElementById('tplName').textContent = '未選択（テンプレートなしでも出力できます）';
+  document.getElementById('tplName').style.color = '#aaa';
+  document.getElementById('tplClear').style.display = 'none';
+  document.getElementById('tplFileInput').value = '';
+}
+
+// --- Excel (テンプレート準拠・関数連鎖) ---
+async function downloadExcel(){
+ try {
+  const wb = XLSX.utils.book_new();
+
+  // 入力値
+  const kojiName   = document.getElementById('kojiName').value   || '';
+  const kojiPlace  = document.getElementById('kojiPlace').value  || '';
+  const koki       = document.getElementById('koki').value       || '';
+  const estNo      = document.getElementById('estNo').value      || '';
+  const kojiClient = document.getElementById('kojiClient').value || '';
+  const disc       = +(document.getElementById('discount').value)||0;
+  const taxMode    = document.getElementById('taxMode')?.value || 'excluded';
+
+  // 日付（令和）
+  const today  = new Date();
+  const reiwaY = today.getFullYear() - 2018;
+  const todayM = today.getMonth() + 1;
+  const todayD = today.getDate();
+
+  // 金額集計
+  const totalSell = items.reduce((a,it)=>a+(+it.sellPrice||0),0);
+  const pretax    = totalSell - disc;
+  const tax       = Math.floor(pretax * 0.1);
+  const grand     = pretax + tax;
+
+  // ─── 行番号の事前計算（大内訳シートとのクロスシート参照に必要）───
+  // 各詳細シートの小計行 = アイテム数 + 3
+  const sheetSubR = {};
+  sheets.forEach(s=>{ sheetSubR[s.key] = items.filter(it=>it.sheet===s.key).length + 3; });
+
+  // 消費税注記（表紙・テンプレートモード共通で使用）
+  const taxNote = taxMode==='included'
+    ? `但し、この見積書には消費税として　${fmt(tax)}円が含まれています。`
+    : `消費税　${fmt(tax)}円は別途申し受けます。`;
+
+  // 大内訳の集計行（工種バンド2行×N + スペーサー2行 + 集計部）
+  const N          = sheets.length;
+  const rGouKei    = N*2 + 4;   // 合計
+  const rHikiki    = N*2 + 6;   // 出精値引（手入力・黄色）
+  const rSashiHiki = N*2 + 8;   // 差引計
+  const rZei       = N*2 + 10;  // 消費税
+  const rGrand     = N*2 + 12;  // 総合計
+
+  // ─── ヘルパー ────────────────────────────────────────
+  const JP  = 'MS PGothic';
+  const NF  = '#,##0';
+
+  // 値セル
+  function cv(v, s){ const t=typeof v==='number'?'n':'s'; const cell={v,t}; if(s)cell.s=s; return cell; }
+  // 数式セル（キャッシュ値付き）
+  function cf(formula, val, s){ const cell={t:'n',f:formula,v:val||0}; if(s)cell.s=s; return cell; }
+
+  function thin(){ return {style:'thin',color:{rgb:'000000'}}; }
+  function med(){  return {style:'medium',color:{rgb:'000000'}}; }
+  const bAll = {top:thin(),bottom:thin(),left:thin(),right:thin()};
+  const bHdr = {top:med(), bottom:med(), left:thin(),right:thin()};
+
+  // 法人格を除去（原価管理・業者別集計で使用）
+  function stripCorp(n){ return (n||'').replace(/^(株式会社|有限会社|合同会社|合資会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人|社会福祉法人|医療法人|学校法人)/,'').replace(/(株式会社|有限会社|合同会社|合資会社)$/,'').trim(); }
+  const YEL  = {fgColor:{rgb:'FFFF99'},patternType:'solid'};
+
+  // 共通ヘッダー行（テンプレートと同じ列名）
+  const HDR = ['No.','名　　　　　称','摘　　　要','数　　量','単　位','単　　価','金　　額','備　　考'];
+  function writeHdr(ws){
+    HDR.forEach((h,ci)=>{
+      ws[`${String.fromCharCode(65+ci)}1`] = cv(h,{
+        font:{sz:11,name:JP,bold:true},
+        alignment:{horizontal:'center',vertical:'center'},
+        border:bHdr
+      });
+    });
+  }
+
+  // 詳細シート・大内訳共通の列幅（テンプレート実測値）
+  const DCOLS=[{wch:8.27},{wch:26},{wch:22},{wch:16.27},{wch:11},{wch:19.45},{wch:19.45},{wch:15}];
+
+  // ════════════════════════════════════════════
+  // ① 表紙
+  // ════════════════════════════════════════════
+  {
+    const ws={};
+
+    // 表紙の主要金額セル：大内訳の行を参照する数式
+    const coverFormula = taxMode==='included'
+      ? `'大内訳'!G${rGrand}`
+      : `'大内訳'!G${rSashiHiki}`;
+    const coverVal  = taxMode==='included' ? grand : pretax;
+
+    // Row 2: タイトル（A2:S2）
+    ws['A2'] = cv('　御　　見　　積　　書　',{
+      font:{bold:true,sz:22,name:JP,underline:true},
+      alignment:{horizontal:'center',vertical:'center'}
+    });
+
+    // Row 4: 見積番号
+    ws['N4'] = cv('No.', {font:{sz:10,name:JP},alignment:{horizontal:'right'}});
+    ws['O4'] = cv(estNo, {font:{sz:10,name:JP},alignment:{horizontal:'center'},fill:YEL,border:{bottom:thin()}});
+
+    // Row 5-6: 発注者（B5:H6）
+    ws['B5'] = cv(kojiClient?(kojiClient+'　御中'):'', {
+      font:{sz:18,name:JP},alignment:{horizontal:'left',vertical:'center'},
+      fill:YEL,border:{bottom:thin()}
+    });
+
+    // Row 5: 日付（令和Y年M月D日 の各セル）
+    ws['L5']=cv('令和',{font:{sz:11,name:JP},alignment:{horizontal:'center'}});
+    ws['M5']=cv(reiwaY,{font:{sz:11,name:JP},alignment:{horizontal:'center'},fill:YEL,border:{bottom:thin()}});
+    ws['N5']=cv('年',  {font:{sz:11,name:JP},alignment:{horizontal:'center'}});
+    ws['O5']=cv(todayM,{font:{sz:11,name:JP},alignment:{horizontal:'center'},fill:YEL,border:{bottom:thin()}});
+    ws['P5']=cv('月',  {font:{sz:11,name:JP},alignment:{horizontal:'center'}});
+    ws['Q5']=cv(todayD,{font:{sz:11,name:JP},alignment:{horizontal:'center'},fill:YEL,border:{bottom:thin()}});
+    ws['R5']=cv('日',  {font:{sz:11,name:JP},alignment:{horizontal:'center'}});
+
+    // Row 7: 挨拶文 / 郵便番号
+    ws['B7']=cv('下記の通り御見積申し上げます。',{font:{sz:10,name:JP}});
+    ws['K7']=cv('〒438-0021',{font:{sz:10,name:JP}});
+
+    // Row 8: 住所
+    ws['K8']=cv('静岡県磐田市玉越80',{font:{sz:10,name:JP}});
+
+    // Row 9-10: 金額（大内訳参照）/ 会社情報
+    ws['B9'] = cf(coverFormula, coverVal, {
+      font:{bold:true,sz:16,name:JP},
+      alignment:{horizontal:'center',vertical:'center'},
+      numFmt:NF
+    });
+    ws['K9'] =cv('株式会社イトー',      {font:{sz:16,name:JP}});
+    ws['K10']=cv('代表取締役　後藤昌美',{font:{sz:12,name:JP}});
+
+    // Row 11: 消費税注記 / 連絡先
+    ws['B11']=cv(taxNote,{font:{sz:10,name:JP},fill:YEL});
+    ws['K11']=cv('TEL　0538-34-6715',{font:{sz:10,name:JP}});
+    ws['K12']=cv('FAX  0538-37-3457',{font:{sz:10,name:JP}});
+
+    // Rows 15-22: 工事情報テーブル（テンプレート準拠）
+    const INFO=[
+      {r:15,label:'工事名',  val:kojiName, yl:true},
+      {r:16,label:'工事場所',val:kojiPlace,yl:true},
+      {r:17,label:'工事概要',val:'',       yl:true},
+      {r:18,label:'工期',    val:koki,     yl:true},
+      {r:19,label:'取引方法',val:'',       yl:true},
+      {r:20,label:'備考',    val:'',       yl:false},
+      {r:21,label:'',        val:'※各種公害調査・測量・設計監理費等は別途',        yl:false},
+      {r:22,label:'',        val:'※地中埋設障害・湧水・仕様変更等は別途協議',      yl:false},
+    ];
+    INFO.forEach(({r,label,val,yl})=>{
+      if(label) ws[`C${r}`]=cv(label,{font:{sz:11,name:JP},alignment:{horizontal:'distributed',vertical:'bottom'},border:bAll});
+      ws[`E${r}`]=cv(val,{font:{sz:11,name:JP},alignment:{horizontal:'left',vertical:'bottom'},fill:yl?YEL:undefined,border:bAll});
+    });
+
+    ws['!ref']='A1:S23';
+    ws['!merges']=[
+      {s:{r:1,c:0}, e:{r:1,c:18}},   // A2:S2  タイトル
+      {s:{r:3,c:14},e:{r:3,c:17}},   // O4:R4  見積番号
+      {s:{r:4,c:1}, e:{r:5,c:7}},    // B5:H6  発注者
+      {s:{r:8,c:1}, e:{r:9,c:7}},    // B9:H10 金額
+      {s:{r:10,c:1},e:{r:11,c:6}},   // B11:G12 消費税注記
+      {s:{r:8,c:10},e:{r:8,c:17}},   // K9:R9  会社名
+      {s:{r:9,c:10},e:{r:9,c:17}},   // K10:R10 代表者
+      {s:{r:10,c:10},e:{r:10,c:17}}, // K11:R11 TEL
+      {s:{r:11,c:10},e:{r:11,c:17}}, // K12:R12 FAX
+      ...INFO.filter(x=>x.label).map(({r})=>({s:{r:r-1,c:2},e:{r:r-1,c:3}})), // C:D ラベル
+      ...INFO.map(({r})=>({s:{r:r-1,c:4},e:{r:r-1,c:8}})),                    // E:I 値
+    ];
+    // テンプレート実測列幅（A〜S）
+    ws['!cols']=[
+      {wch:12.27},{wch:3.09},{wch:9.64},{wch:4.27},{wch:8.64},{wch:10.36},
+      {wch:9.36},{wch:7.00},{wch:14.73},{wch:3.73},{wch:6.36},{wch:10.73},
+      {wch:4.36},{wch:2.45},{wch:2.73},{wch:2.45},{wch:2.73},{wch:2.45},{wch:12.27}
+    ];
+    ws['!rows']=[
+      {hpx:61},  // Row 1: 45.75pt
+      {hpx:45},  // Row 2: 33.75pt 御見積書
+      {hpx:26},{hpx:26},         // Row 3-4: 19.5pt
+      {hpx:32},{hpx:37},         // Row 5-6: 24pt/27.75pt 発注者
+      {hpx:24},{hpx:24},         // Row 7-8: 18pt
+      {hpx:25},{hpx:25},         // Row 9-10: 18.75pt 金額
+      {hpx:20},{hpx:20},         // Row 11-12: 15pt
+      {hpx:24},{hpx:53},         // Row 13-14: 18pt/39.75pt
+      ...Array(8).fill({hpx:31}) // Row 15-22: 23.25pt 工事情報
+    ];
+    ws['!pageSetup']  ={paperSize:9,orientation:'landscape',scale:94};
+    ws['!margins']    ={left:0.236,right:0.236,top:0.748,bottom:0.748,header:0.512,footer:0.512};
+    ws['!printOptions']={horizontalCentered:true};
+    ws['!sheetViews'] =[{showGridLines:false,zoomScale:95}];
+
+    XLSX.utils.book_append_sheet(wb,ws,'表紙');
+  }
+
+  // ════════════════════════════════════════════
+  // ② 大内訳
+  // ════════════════════════════════════════════
+  {
+    const ws={};
+    writeHdr(ws);
+    const merges=[];
+    let r=2;
+
+    // 工種ごとに2行結合バンド（G列 = 詳細シートの小計を参照する数式）
+    sheets.forEach(s=>{
+      const subR   = sheetSubR[s.key];
+      const sTotal = items.filter(it=>it.sheet===s.key).reduce((a,it)=>a+(+it.sellPrice||0),0);
+      const bot    = r+1;
+
+      ws[`A${r}`]=cv(s.key, {font:{sz:11,name:JP},alignment:{horizontal:'center',vertical:'center'},border:bAll});
+      ws[`B${r}`]=cv(s.name,{font:{sz:11,name:JP},alignment:{horizontal:'left',vertical:'center'},  border:bAll});
+      ws[`C${r}`]=cv('',    {border:bAll});
+      ws[`D${r}`]=cv(1,     {font:{sz:11,name:JP},alignment:{horizontal:'right',vertical:'center'},  border:bAll});
+      ws[`E${r}`]=cv('式',  {font:{sz:11,name:JP},alignment:{horizontal:'center',vertical:'center'}, border:bAll});
+      ws[`F${r}`]=cv('',    {border:bAll});
+      // クロスシート参照数式（小文字キーでも動作、Excelが解決）
+      ws[`G${r}`]=cf(`${s.key}!G${subR}`, sTotal, {
+        font:{sz:10,name:JP},alignment:{horizontal:'right',vertical:'center'},numFmt:NF,border:bAll
+      });
+      ws[`H${r}`]=cv('',{border:bAll});
+
+      for(let ci=0;ci<8;ci++) merges.push({s:{r:r-1,c:ci},e:{r:bot-1,c:ci}});
+      r+=2;
+    });
+
+    // スペーサー2行
+    r+=2;
+
+    // 合計（=SUM で全工種バンドを集計）
+    const lastDataRow = N*2+1; // 最後の工種バンドの下行
+    ws[`C${r}`]=cv('合　　　　計',{font:{sz:11,name:JP},alignment:{horizontal:'distributed',vertical:'center'},border:bAll});
+    ws[`G${r}`]=cf(`SUM(G2:G${lastDataRow})`,totalSell,{font:{bold:true,sz:11,name:JP},alignment:{horizontal:'right',vertical:'center'},numFmt:NF,border:bAll});
+    [[0,1],[2,5],[6,7]].forEach(([cs,ce])=>{ merges.push({s:{r:r-1,c:cs},e:{r:r-1,c:ce}}); merges.push({s:{r:r,c:cs},e:{r:r,c:ce}}); });
+    r+=2;
+
+    // 出精値引（黄色・空白 → ユーザーが総合計を見ながら手入力）
+    ws[`C${r}`]=cv('出 精 値 引',{font:{sz:11,name:JP},alignment:{horizontal:'distributed',vertical:'center'},border:bAll});
+    ws[`G${r}`]=cv('',{fill:YEL,border:bAll,alignment:{horizontal:'right',vertical:'center'}});
+    [[0,1],[2,5],[6,7]].forEach(([cs,ce])=>{ merges.push({s:{r:r-1,c:cs},e:{r:r-1,c:ce}}); merges.push({s:{r:r,c:cs},e:{r:r,c:ce}}); });
+    r+=2;
+
+    // 差引計（= 合計 + 出精値引セル、出精値引を負数で入力すると引かれる）
+    ws[`C${r}`]=cv('差   引   計',{font:{sz:11,name:JP},alignment:{horizontal:'distributed',vertical:'center'},border:bAll});
+    ws[`G${r}`]=cf(`G${rGouKei}+G${rHikiki}`,pretax,{font:{bold:true,sz:11,name:JP},alignment:{horizontal:'right',vertical:'center'},numFmt:NF,border:bAll});
+    [[0,1],[2,5],[6,7]].forEach(([cs,ce])=>{ merges.push({s:{r:r-1,c:cs},e:{r:r-1,c:ce}}); merges.push({s:{r:r,c:cs},e:{r:r,c:ce}}); });
+    r+=2;
+
+    // 消費税（ROUNDDOWN で端数切捨て）
+    ws[`C${r}`]=cv('消   費   税',{font:{sz:11,name:JP},alignment:{horizontal:'distributed',vertical:'center'},border:bAll});
+    ws[`G${r}`]=cf(`ROUNDDOWN(G${rSashiHiki}*0.1,0)`,tax,{font:{sz:11,name:JP},alignment:{horizontal:'right',vertical:'center'},numFmt:NF,border:bAll});
+    [[0,1],[2,5],[6,7]].forEach(([cs,ce])=>{ merges.push({s:{r:r-1,c:cs},e:{r:r-1,c:ce}}); merges.push({s:{r:r,c:cs},e:{r:r,c:ce}}); });
+    r+=2;
+
+    // 総合計
+    ws[`C${r}`]=cv('総   合   計',{font:{bold:true,sz:12,name:JP},alignment:{horizontal:'distributed',vertical:'center'},border:bAll});
+    ws[`G${r}`]=cf(`G${rSashiHiki}+G${rZei}`,grand,{font:{bold:true,sz:12,name:JP},alignment:{horizontal:'right',vertical:'center'},numFmt:NF,border:bAll});
+    [[0,1],[2,5],[6,7]].forEach(([cs,ce])=>{ merges.push({s:{r:r-1,c:cs},e:{r:r-1,c:ce}}); merges.push({s:{r:r,c:cs},e:{r:r,c:ce}}); });
+    r+=2;
+
+    ws['!ref']   =`A1:H${r-1}`;
+    ws['!merges']=merges;
+    ws['!cols']  =DCOLS;
+    ws['!rows']  =[{hpx:33},...Array(r-2).fill({hpx:16})];
+    ws['!pageSetup']  ={paperSize:9,orientation:'landscape',scale:97};
+    ws['!margins']    ={left:0.394,right:0.394,top:0.930,bottom:0.394,header:0.512,footer:0.200};
+    ws['!printOptions']={horizontalCentered:true};
+    ws['!sheetViews'] =[{showGridLines:false}];
+
+    XLSX.utils.book_append_sheet(wb,ws,'大内訳');
+  }
+
+  // ════════════════════════════════════════════
+  // ③ 詳細シート（A, B, C …）
+  // ════════════════════════════════════════════
+  sheets.forEach(s=>{
+    const ws={};
+    const si  = items.filter(it=>it.sheet===s.key);
+    const subR= sheetSubR[s.key]; // 小計行（事前計算済み）
+
+    writeHdr(ws);
+
+    // Row 2: 工種タイトル（B2:H2 結合）
+    ws['A2']=cv(s.key,{font:{bold:true,sz:14,name:JP},alignment:{horizontal:'center',vertical:'center'},border:bAll});
+    ws['B2']=cv(`${s.name}　明細`,{font:{sz:10,name:JP},alignment:{horizontal:'left',vertical:'center'},border:bAll});
+    ['C','D','E','F','G','H'].forEach(col=>{ws[`${col}2`]=cv('',{border:bAll});});
+
+    // Rows 3〜(subR-1): 明細行
+    si.forEach((it,idx)=>{
+      const er=idx+3;
+      const sellUP = (it.qty&&it.qty>0) ? roundTo(it.sellPrice/it.qty,1) : (it.sellPrice||0);
+      ws[`A${er}`]=cv(idx+1,      {font:{sz:10,name:JP},alignment:{horizontal:'center'},border:bAll});
+      ws[`B${er}`]=cv(it.name||'',{font:{sz:10,name:JP},border:bAll});
+      ws[`C${er}`]=cv(it.memo||'',{font:{sz:10,name:JP},border:bAll});
+      ws[`D${er}`]=cv(it.qty||0,  {font:{sz:10,name:JP},alignment:{horizontal:'right'},numFmt:NF,border:bAll});
+      ws[`E${er}`]=cv(it.unit||'式',{font:{sz:10,name:JP},alignment:{horizontal:'center'},border:bAll});
+      ws[`F${er}`]=cv(sellUP,     {font:{sz:10,name:JP},alignment:{horizontal:'right'},numFmt:NF,border:bAll});
+      // 金額 = 数量 × 単価（数式）
+      if(it.qty&&it.qty>0){
+        ws[`G${er}`]=cf(`D${er}*F${er}`,it.sellPrice||0,{font:{sz:10,name:JP},alignment:{horizontal:'right'},numFmt:NF,border:bAll});
+      } else {
+        ws[`G${er}`]=cv(it.sellPrice||0,{font:{sz:10,name:JP},alignment:{horizontal:'right'},numFmt:NF,border:bAll});
+      }
+      ws[`H${er}`]=cv('',{border:bAll});
+    });
+
+    // 小計行（=SUM）
+    const sheetSub=si.reduce((a,it)=>a+(+it.sellPrice||0),0);
+    ['A','B','D','E','F','H'].forEach(col=>{ws[`${col}${subR}`]=cv('',{border:bAll});});
+    ws[`C${subR}`]=cv('　小　　　計',{font:{sz:10,name:JP},alignment:{horizontal:'left'},border:bAll});
+    ws[`G${subR}`]=cf(`SUM(G3:G${subR-1})`,sheetSub,{font:{bold:true,sz:10,name:JP},alignment:{horizontal:'right'},numFmt:NF,border:bAll});
+
+    ws['!ref']   =`A1:H${subR}`;
+    ws['!merges']=[{s:{r:1,c:1},e:{r:1,c:7}}]; // B2:H2
+    ws['!cols']  =DCOLS;
+    ws['!rows']  =[{hpx:37},{hpx:32},...si.map(()=>({hpx:32})),{hpx:32}];
+    ws['!pageSetup']  ={paperSize:9,orientation:'landscape'};
+    ws['!margins']    ={left:0.394,right:0.394,top:0.930,bottom:0.394,header:0.512,footer:0.200};
+    ws['!printOptions']={horizontalCentered:true};
+    ws['!sheetViews'] =[{showGridLines:false}];
+
+    XLSX.utils.book_append_sheet(wb,ws,s.key);
+  });
+
+  // ════════════════════════════════════════════
+  // ④ 原価管理（内部管理用）
+  // ════════════════════════════════════════════
+  {
+    const ws4={};
+    const hS={font:{bold:true,name:JP,sz:10},fill:{fgColor:{rgb:'D9D9D9'},patternType:'solid'},border:bAll,alignment:{horizontal:'center',vertical:'center'}};
+    const H4=['シート','名称','数量','単位','売価','原価','実行価格','業者名','粗利額','粗利率','摘要'];
+    H4.forEach((h,ci)=>{ ws4[String.fromCharCode(65+ci)+'1']={v:h,t:'s',s:hS}; });
+
+    items.forEach((it,ri)=>{
+      const sh=sheets.find(s=>s.key===it.sheet);
+      const profit=(it.sellPrice||0)-(it.amount||0);
+      const profitRate=it.sellPrice>0?(profit/it.sellPrice):0;
+      const vn=stripCorp(it.vendor);
+      const r=ri+2;
+      const nS=(extra={})=>({font:{name:JP,sz:10},border:bAll,alignment:{horizontal:'right'},...extra});
+      const sS=(extra={})=>({font:{name:JP,sz:10},border:bAll,...extra});
+      ws4['A'+r]={v:it.sheet+'：'+(sh?sh.name:''),t:'s',s:sS()};
+      ws4['B'+r]={v:it.name||'',t:'s',s:sS()};
+      ws4['C'+r]={v:it.qty||0,t:'n',s:nS({numFmt:NF})};
+      ws4['D'+r]={v:it.unit||'',t:'s',s:sS({alignment:{horizontal:'center'}})};
+      ws4['E'+r]={v:it.sellPrice||0,t:'n',s:nS({numFmt:NF})};
+      ws4['F'+r]={v:it.amount||0,t:'n',s:nS({numFmt:NF})};
+      ws4['G'+r]={v:'',t:'s',s:sS()};
+      ws4['H'+r]={v:vn,t:'s',s:sS()};
+      ws4['I'+r]={v:profit,t:'n',s:nS({numFmt:NF})};
+      ws4['J'+r]={v:profitRate,t:'n',s:nS({numFmt:'0.0%'})};
+      ws4['K'+r]={v:it.memo||'',t:'s',s:sS()};
+    });
+
+    ws4['!ref']='A1:K'+(items.length+1);
+    ws4['!cols']=[{wch:14},{wch:16},{wch:8},{wch:5},{wch:11},{wch:11},{wch:11},{wch:12},{wch:11},{wch:8},{wch:14}];
+    ws4['!rows']=[{hpx:20},...items.map(()=>({hpx:18}))];
+    ws4['!autofilter']={ref:'A1:K1'};
+    ws4['!sheetViews']=[{state:'frozen',xSplit:1,ySplit:1,topLeftCell:'B2'}];
+    ws4['!pageSetup']={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
+    XLSX.utils.book_append_sheet(wb,ws4,'原価管理');
+  }
+
+  // ════════════════════════════════════════════
+  // ⑤ 業者別集計（内部管理用）
+  // ════════════════════════════════════════════
+  {
+    const vm={};
+    items.forEach(it=>{
+      const vk=stripCorp(it.vendor)||'不明';
+      const sk=it.sheet+'：'+(sheets.find(s=>s.key===it.sheet)?.name||'');
+      const key=vk+'__'+sk;
+      if(!vm[key]) vm[key]={vendor:vk,sheet:sk,cost:0,sell:0};
+      vm[key].cost+=(+it.amount||0); vm[key].sell+=(+it.sellPrice||0);
+    });
+    const ws5={};
+    const hS={font:{bold:true,name:JP,sz:10},fill:{fgColor:{rgb:'D9D9D9'},patternType:'solid'},border:bAll,alignment:{horizontal:'center',vertical:'center'}};
+    const H5=['業者名','工種','合計原価','合計売価','粗利額','粗利率'];
+    H5.forEach((h,ci)=>{ ws5[String.fromCharCode(65+ci)+'1']={v:h,t:'s',s:hS}; });
+    const vrows=Object.values(vm);
+    vrows.forEach((v,ri)=>{
+      const p=v.sell-v.cost;
+      const pr=v.sell>0?(p/v.sell):0;
+      const r=ri+2;
+      const nS=(extra={})=>({font:{name:JP,sz:10},border:bAll,alignment:{horizontal:'right'},...extra});
+      const sS=(extra={})=>({font:{name:JP,sz:10},border:bAll,...extra});
+      ws5['A'+r]={v:v.vendor,t:'s',s:sS()};
+      ws5['B'+r]={v:v.sheet,t:'s',s:sS()};
+      ws5['C'+r]={v:v.cost,t:'n',s:nS({numFmt:NF})};
+      ws5['D'+r]={v:v.sell,t:'n',s:nS({numFmt:NF})};
+      ws5['E'+r]={v:p,t:'n',s:nS({numFmt:NF})};
+      ws5['F'+r]={v:pr,t:'n',s:nS({numFmt:'0.0%'})};
+    });
+    ws5['!ref']='A1:F'+(vrows.length+1);
+    ws5['!cols']=[{wch:16},{wch:20},{wch:13},{wch:13},{wch:13},{wch:10}];
+    ws5['!rows']=[{hpx:20},...vrows.map(()=>({hpx:18}))];
+    ws5['!autofilter']={ref:'A1:F1'};
+    ws5['!sheetViews']=[{state:'frozen',xSplit:1,ySplit:1,topLeftCell:'B2'}];
+    ws5['!pageSetup']={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0};
+    XLSX.utils.book_append_sheet(wb,ws5,'業者別集計');
+  }
+
+  // ─── ダウンロード ───
+  if (_templateBuffer) {
+    // テンプレートモード: DL前に整合性チェック＋確認ダイアログ
+    const warnings = [];
+    if (sheets.length > 12) warnings.push(`⚠ 工種数(${sheets.length})が12を超えています。12を超える分は出力されません。`);
+    const mapLines = [];
+    sheets.forEach((s, i) => {
+      if (i >= 12) return;
+      const si = items.filter(it => it.sheet === s.key);
+      const cnt = si.length;
+      const sub = si.reduce((a, it) => a + (+it.sellPrice || +it.amount || 0), 0);
+      if (cnt > 30) warnings.push(`⚠ 工種「${s.name}」の項目数(${cnt})が30を超えています。30を超える分は出力されません。`);
+      mapLines.push(`  ${i+1}内訳 ← ${s.name}（${cnt}項目, ¥${fmt(sub)}）`);
+    });
+    const ouchiSum = mapLines.length;
+    const msg = `下記内容でテンプレートExcelを出力します。\n\n`
+      +`【表紙】\n`
+      +`  客先: ${kojiClient || '(未入力)'}\n`
+      +`  工事名: ${kojiName || '(未入力)'}\n`
+      +`  見積金額: ¥${fmt(grand)}（${taxMode==='included'?'税込':'税抜'}）\n\n`
+      +`【大内訳 → 各内訳の割当（${ouchiSum}件、1から順番）】\n${mapLines.join('\n')}\n\n`
+      +(warnings.length ? warnings.join('\n')+'\n\n' : '')
+      +`■ Excel数式（=D*F, =SUM, シート間参照等）はテンプレートの状態を保持します。\n`
+      +`■ Excelで開いた時に自動再計算されます。\n\n`
+      +`この内容でダウンロードしますか？`;
+    if (!confirm(msg)) {
+      return;  // キャンセル
+    }
+    await _applyTemplate(wb, {
+      kojiName, kojiClient, kojiPlace, koki, estNo,
+      grand, pretax, tax, reiwaY, todayM, todayD,
+      taxMode, taxNote, rGrand, rSashiHiki, sheets
+    });
+  } else {
+    // 通常モード：全シートをゼロから生成
+    const _pc={'表紙':{orientation:'landscape',scale:94,margins:{left:0.236,right:0.236,top:0.748,bottom:0.748,header:0.512,footer:0.512},horizontalCentered:true},'大内訳':{orientation:'landscape',scale:97,margins:{left:0.394,right:0.394,top:0.930,bottom:0.394,header:0.512,footer:0.200},horizontalCentered:true}};
+    sheets.forEach(s=>{ _pc[s.key]={orientation:'landscape',margins:{left:0.394,right:0.394,top:0.930,bottom:0.394,header:0.512,footer:0.200},horizontalCentered:true}; });
+    await _patchXlsx(wb,`${kojiName||'見積書'}_見積書.xlsx`,_pc);
+  }
+  document.getElementById('dlDone').style.display='inline';
+ } catch(err) {
+  console.error('Excel生成エラー:', err);
+  alert('Excelの生成でエラーが発生しました。\n詳細: ' + err.message);
+ }
+}
+
+// --- JSZipでxlsxにページ設定を直接注入してダウンロード ---
+async function _patchXlsx(wb, filename, pageConfigs){
+  const data=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const zip=await JSZip.loadAsync(data);
+  // wb.SheetNames の順番が sheet1.xml, sheet2.xml ... に対応（SheetJS仕様）
+  for(let i=0;i<wb.SheetNames.length;i++){
+    const sn=wb.SheetNames[i];
+    const cfg=pageConfigs[sn];
+    if(!cfg) continue;
+    const wsFile=zip.file(`xl/worksheets/sheet${i+1}.xml`);
+    if(!wsFile) continue;
+    let xml=await wsFile.async('string');
+    // 既存の印刷設定を除去（SheetJSが不完全に書く場合があるため）
+    xml=xml.replace(/<printOptions[^>]*\/>/g,'')
+           .replace(/<pageMargins[^>]*\/>/g,'')
+           .replace(/<pageSetup[^>]*\/>/g,'');
+    const m=cfg.margins;
+    const inj=(cfg.horizontalCentered?'<printOptions horizontalCentered="1"/>':'')
+      +(m?`<pageMargins left="${m.left}" right="${m.right}" top="${m.top}" bottom="${m.bottom}" header="${m.header}" footer="${m.footer}"/>`:'')
+      +`<pageSetup paperSize="9" orientation="${cfg.orientation||'portrait'}"${cfg.scale?` scale="${cfg.scale}"`:''}/>`;
+    xml=xml.replace('</worksheet>',inj+'</worksheet>');
+    zip.file(`xl/worksheets/sheet${i+1}.xml`,xml);
+  }
+  const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+// --- テンプレートExcelにデータを埋め込んでダウンロード ---
+// 【方針】テンプレートのセル値だけを書き換える。SheetJS生成・XML注入は一切しない。
+//   - テンプレートzipを展開
+//   - 表紙: 既存セルに値を上書き（インライン文字列で）
+//   - 大内訳: B5〜B16 に工種名（最大12）。G列の数式はテンプレートのまま
+//   - 1内訳〜12内訳: B/C/D/E/F列の行4〜17に明細（最大14）。G列の =D*F 数式はそのまま
+async function _applyTemplate(wb, d) {
+  const {kojiName,kojiClient,kojiPlace,koki,estNo,grand,pretax,tax,
+         reiwaY,todayM,todayD,taxMode,taxNote,sheets} = d;
+
+  // テンプレートzipを展開
+  const tplZip = await JSZip.loadAsync(_templateBuffer);
+
+  function escX(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // ─── セル書き換えヘルパー（既存s=スタイル属性を保持、インライン文字列でSST依存なし） ───
+  function setCell(xml, ref, type, val) {
+    const esc = ref.replace(/[.*+?^=!:${}()|[\]/\\]/g,'\\$1');
+    const selfRe = new RegExp(`<c r="${esc}"([^>]*)\\/>`);
+    const openRe = new RegExp(`<c r="${esc}"([^>]*)>[\\s\\S]*?<\\/c>`);
+    function build(attrs) {
+      const s = (attrs.match(/s="[^"]+"/) || [''])[0];
+      if (type==='is') return `<c r="${ref}" ${s} t="inlineStr"><is><t xml:space="preserve">${escX(val)}</t></is></c>`;
+      if (type==='n')  return `<c r="${ref}" ${s}><v>${val}</v></c>`;
+      if (type==='f')  return `<c r="${ref}" ${s}><f>${escX(val.f)}</f><v>${val.v}</v></c>`;
+      if (type==='blank') return `<c r="${ref}" ${s}/>`;
+    }
+    const sm = xml.match(selfRe); if (sm) return xml.replace(selfRe, build(sm[1]));
+    const om = xml.match(openRe); if (om) return xml.replace(openRe, build(om[1]));
+    // セルが存在しない → 行内の適切な位置に新規挿入は複雑なので、行ごと新規挿入する方式
+    // 行を特定してセルを追加
+    const colMatch = ref.match(/^([A-Z]+)(\d+)$/);
+    if (!colMatch) return xml;
+    const rowNum = colMatch[2];
+    const rowRe = new RegExp(`<row r="${rowNum}"([^>]*)>([\\s\\S]*?)<\\/row>`);
+    const rm = xml.match(rowRe);
+    if (rm) {
+      const newCell = build('');
+      const newRow = `<row r="${rowNum}"${rm[1]}>${rm[2]}${newCell}</row>`;
+      return xml.replace(rowRe, newRow);
+    }
+    return xml;
+  }
+
+  // ─── シート名 → ファイルパス の解決 ───
+  const wbXml   = await tplZip.file('xl/workbook.xml').async('string');
+  const relsXml = await tplZip.file('xl/_rels/workbook.xml.rels').async('string');
+  const nameToRid = {};
+  for (const m of wbXml.matchAll(/<sheet name="([^"]+)"[^>]*r:id="([^"]+)"/g)) nameToRid[m[1]] = m[2];
+  const ridToPath = {};
+  for (const m of relsXml.matchAll(/<Relationship Id="([^"]+)"[^>]*Target="([^"]+)"/g)) {
+    if (m[2].includes('worksheets/')) ridToPath[m[1]] = 'xl/' + m[2].replace(/^\/?xl\//,'');
+  }
+  // シート名正規化（全角数字→半角、前後空白除去）
+  function normSheetName(n) {
+    return n.trim().replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  }
+  function sheetPath(name) {
+    // 完全一致
+    const exact = nameToRid[name];
+    if (exact && ridToPath[exact]) return ridToPath[exact];
+    // 正規化一致（"１内訳"⇔"1内訳"、"2内訳 "⇔"2内訳" 対応）
+    const target = normSheetName(name);
+    const fuzzy = Object.keys(nameToRid).find(n => normSheetName(n) === target);
+    return fuzzy ? ridToPath[nameToRid[fuzzy]] : null;
+  }
+
+  // ═══════════════════════════════════════
+  // 表紙
+  // ═══════════════════════════════════════
+  {
+    const p = sheetPath('表紙');
+    if (p) {
+      let xml = await tplZip.file(p).async('string');
+      xml = setCell(xml,'O4', 'is', estNo || '');
+      xml = setCell(xml,'B5', 'is', kojiClient ? kojiClient+'　様' : '');
+      xml = setCell(xml,'M5', 'n',  reiwaY);
+      xml = setCell(xml,'O5', 'n',  todayM);
+      xml = setCell(xml,'Q5', 'n',  todayD);
+      // 御見積金額: 大内訳の総合計を参照（込み=G24, 抜き=G21）
+      const amtRef = taxMode==='included' ? '大内訳!G24' : '大内訳!G21';
+      const amtVal = taxMode==='included' ? grand : pretax;
+      xml = setCell(xml,'D9', 'f', {f:amtRef, v:amtVal});
+      // 税注釈: テンプレートのF12数式 =IF(B11="但し、この見積書には消費税として",...) と整合
+      // D12 はテンプレートに =大内訳!G23（税額）の数式があるのでそのまま使う
+      if (taxMode === 'included') {
+        xml = setCell(xml,'B11','is', '但し、この見積書には消費税として');
+        // D12 はテンプレートの数式 =大内訳!G23 をそのまま使用 → 税額自動表示
+        // F12 は自動で "が含まれています。" を返す
+      } else {
+        xml = setCell(xml,'B11','is', '消費税は別途申し受けます。');
+        xml = setCell(xml,'D12','blank', null);  // 抜きモードはD12を空欄に（数式を消す）
+        // F12 は自動で "" を返す（B11が不一致のため）
+      }
+      xml = setCell(xml,'E15','is', kojiName  || '');
+      xml = setCell(xml,'E16','is', kojiPlace || '');
+      xml = setCell(xml,'E17','is', '');
+      xml = setCell(xml,'E18','is', koki || '');
+      xml = setCell(xml,'E19','is', '');
+      xml = setCell(xml,'E20','is', '');
+      tplZip.file(p, xml);
+    }
+  }
+
+  // ═══════════════════════════════════════
+  // 大内訳: 工種名を B5〜B16 に流し込む（テンプレートのG列数式はそのまま）
+  // ═══════════════════════════════════════
+  {
+    const p = sheetPath('大内訳');
+    if (p) {
+      let xml = await tplZip.file(p).async('string');
+      sheets.forEach((s, i) => {
+        if (i >= 12) return;
+        xml = setCell(xml, `B${5+i}`, 'is', s.name || s.key || '');
+      });
+      tplZip.file(p, xml);
+    }
+  }
+
+  // ═══════════════════════════════════════
+  // 1内訳〜12内訳: 明細を行4〜17に流し込む
+  // ═══════════════════════════════════════
+  for (let i = 0; i < Math.min(sheets.length, 12); i++) {
+    const tgtName = `${i+1}内訳`;
+    const p = sheetPath(tgtName);
+    if (!p) continue;
+
+    let xml = await tplZip.file(p).async('string');
+    // 工種名を B2 にも入れる
+    xml = setCell(xml, 'B2', 'is', sheets[i].name || sheets[i].key || '');
+
+    const sheetItems = items.filter(it => it.sheet === sheets[i].key);
+    // 行マッピング: 項目0〜14 → 行4〜18（上半分、計15項目）
+    //              項目15〜29 → 行23〜37（下半分、計15項目）
+    //   ※行19=上半分小計、行38=下半分小計、行20〜22はヘッダ/ギャップでスキップ
+    const N = Math.min(sheetItems.length, 30);
+    for (let j = 0; j < N; j++) {
+      const it = sheetItems[j];
+      const r = j < 15 ? (4 + j) : (23 + j - 15);
+      const q  = Number(it.qty) || 0;
+      // 単価 = 売価 / 数量（売価優先、なければunitPrice）
+      const sell = Number(it.sellPrice) || Number(it.amount) || 0;
+      const up = (q > 0 && sell > 0) ? Math.round(sell / q) : (Number(it.unitPrice) || 0);
+      xml = setCell(xml, `B${r}`, 'is', it.name  || '');
+      xml = setCell(xml, `C${r}`, 'is', it.memo  || '');
+      xml = setCell(xml, `D${r}`, 'n',  q || 1);
+      xml = setCell(xml, `E${r}`, 'is', it.unit  || '式');
+      xml = setCell(xml, `F${r}`, 'n',  up);
+      // G列は =D*F 数式のままにする
+    }
+    tplZip.file(p, xml);
+  }
+
+  // ═══════════════════════════════════════
+  // 数式キャッシュ削除（Excelに強制再計算させる）
+  // 全シートの <f>...</f><v>...</v> から <v> を削除 → 数式が必ず再評価される
+  // ═══════════════════════════════════════
+  for (const p of Object.values(ridToPath)) {
+    const f = tplZip.file(p);
+    if (!f) continue;
+    let xml = await f.async('string');
+    xml = xml.replace(/(<f[^>]*>[\s\S]*?<\/f>)\s*<v>[^<]*<\/v>/g, '$1');
+    tplZip.file(p, xml);
+  }
+
+  // calcChain削除（再計算強制）
+  tplZip.remove('xl/calcChain.xml');
+
+  // workbook.xml の calcPr に forceFullCalcOnLoad="1" を設定
+  {
+    let wbX = await tplZip.file('xl/workbook.xml').async('string');
+    if (wbX.match(/<calcPr[^>]*\/>/)) {
+      wbX = wbX.replace(/<calcPr([^>]*)\/>/, (m, attrs) => {
+        if (attrs.includes('forceFullCalcOnLoad')) return m;
+        return `<calcPr${attrs} fullCalcOnLoad="1" forceFullCalcOnLoad="1"/>`;
+      });
+    } else {
+      wbX = wbX.replace('</workbook>', '<calcPr fullCalcOnLoad="1" forceFullCalcOnLoad="1"/></workbook>');
+    }
+    tplZip.file('xl/workbook.xml', wbX);
+  }
+
+  // ─── ダウンロード ───
+  const blob = await tplZip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download=`${kojiName||'見積書'}_見積書.xlsx`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 30000);
+}
+
+// --- Reset ---
+function resetApp(){
+  vendors=[{name:''}]; files=[]; sheets=[]; items=[]; reconciliation=[]; coverTotal=0; activeSheet='';
+  renderVendors(); goStep(0);
+  document.getElementById('fileList').innerHTML='';
+  document.getElementById('errBox').style.display='none';
+  document.getElementById('dlDone').style.display='none';
+}
+
+// --- Drag & Drop ---
+const dz=document.getElementById('dropzone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');addFiles(e.dataTransfer.files)});
+</script>
+</body>
+</html>
