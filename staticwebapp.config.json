@@ -5,10 +5,13 @@
       "allowedRoles": ["authenticated"]
     }
   ],
-  "responseOverrides": {
-    "401": {
-      "redirect": "/.auth/login/aad",
-      "statusCode": 302
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/f36ce7ad-3d82-4f7f-b171-6aae3f7713dd/v2.0"
+        }
+      }
     }
   }
 }
