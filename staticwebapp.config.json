@@ -1,1 +1,26 @@
-{"routes":[{"route":"/*","allowedRoles":["authenticated"]}]}
+{
+  "routes": [
+    {
+      "route": "/.auth/login/aad",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/unauthorized.html",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/tenant-check.js",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/*",
+      "allowedRoles": ["authenticated"]
+    }
+  ],
+  "responseOverrides": {
+    "401": {
+      "redirect": "/.auth/login/aad",
+      "statusCode": 302
+    }
+  }
+}
