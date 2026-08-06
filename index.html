@@ -108,13 +108,6 @@ td input:focus,td select:focus{outline:none;border-color:#999}
 
 <div class="content">
 
-  <div class="api-bar">
-    <label>Anthropic APIキー</label>
-    <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off">
-    <button onclick="saveKey()">保存</button>
-    <span class="api-saved" id="keySaved">✓ 保存済み</span>
-  </div>
-
   <!-- Step 0 -->
   <div id="step0">
     <div class="card">
@@ -302,6 +295,9 @@ td input:focus,td select:focus{outline:none;border-color:#999}
 
 <script>
 let vendors = [{name:''}];
+// ⚠️ 社内配布用に埋め込み。下のプレースホルダーを実際のキーに書き換えてください。
+const ANTHROPIC_API_KEY = "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";
+
 let files = [];
 let sheets = [];
 let items = [];
@@ -310,20 +306,9 @@ let activeSheet = '';
 let _templateBuffer = null;
 
 window.addEventListener('load', ()=>{
-  // APIキー復元
-  try{
-    const s = localStorage.getItem('anthropic_api_key');
-    if(s){ document.getElementById('apiKey').value=s; document.getElementById('keySaved').style.display='inline'; }
-  }catch(e){}
   // 業者入力欄初期化
   renderVendors();
 });
-
-// --- API Key ---
-function saveKey(){
-  const k = document.getElementById('apiKey').value.trim();
-  if(k){ try{ localStorage.setItem('anthropic_api_key',k); document.getElementById('keySaved').style.display='inline'; }catch(e){} }
-}
 
 // --- Steps ---
 function goStep(n){
@@ -393,8 +378,8 @@ async function fileToBase64(file){
 function showErr(msg){ const b=document.getElementById('errBox'); b.textContent=msg; b.style.display='block'; }
 
 async function runExtract(){
-  const apiKey = document.getElementById('apiKey').value.trim();
-  if(!apiKey){ showErr('Anthropic APIキーを入力してください'); return; }
+  const apiKey = ANTHROPIC_API_KEY;
+  if(!apiKey || apiKey.indexOf('xxxxx')>=0){ showErr('APIキーが設定されていません（管理者に連絡してください）'); return; }
   if(!files.length){ showErr('ファイルをアップロードしてください'); return; }
   document.getElementById('errBox').style.display = 'none';
   document.getElementById('loadingBox').classList.remove('hidden');
