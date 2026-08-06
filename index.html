@@ -20,11 +20,6 @@ body{font-family:'Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;background:#
 .card{background:#fff;border:1px solid #e0dfd8;border-radius:12px;padding:20px;margin-bottom:14px}
 .card-title{font-size:14px;font-weight:600;margin-bottom:14px;color:#1a1a1a}
 .card-sub{font-size:12px;color:#888;margin-bottom:12px;line-height:1.6}
-.api-bar{background:#fff;border:1px solid #e0dfd8;border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.api-bar label{font-size:12px;color:#888;white-space:nowrap;margin-bottom:0}
-.api-bar input{flex:1;min-width:200px;font-size:13px;border:1px solid #ddd;border-radius:6px;padding:6px 10px;font-family:monospace;color:#333}
-.api-bar button{font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-family:inherit}
-.api-saved{font-size:12px;color:#2d8f5a;display:none}
 label{font-size:12px;color:#888;display:block;margin-bottom:4px}
 input[type=text],input[type=number],select{width:100%;font-size:14px;border:1px solid #ddd;border-radius:7px;padding:8px 10px;background:#fff;color:#1a1a1a;font-family:inherit}
 input:focus,select:focus{outline:none;border-color:#999}
@@ -295,8 +290,6 @@ td input:focus,td select:focus{outline:none;border-color:#999}
 
 <script>
 let vendors = [{name:''}];
-// ⚠️ 社内配布用に埋め込み。下のプレースホルダーを実際のキーに書き換えてください。
-const ANTHROPIC_API_KEY = "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";
 
 let files = [];
 let sheets = [];
@@ -378,8 +371,6 @@ async function fileToBase64(file){
 function showErr(msg){ const b=document.getElementById('errBox'); b.textContent=msg; b.style.display='block'; }
 
 async function runExtract(){
-  const apiKey = ANTHROPIC_API_KEY;
-  if(!apiKey || apiKey.indexOf('xxxxx')>=0){ showErr('APIキーが設定されていません（管理者に連絡してください）'); return; }
   if(!files.length){ showErr('ファイルをアップロードしてください'); return; }
   document.getElementById('errBox').style.display = 'none';
   document.getElementById('loadingBox').classList.remove('hidden');
@@ -422,16 +413,9 @@ async function runExtract(){
   msgContent.push({type:'text', text:prompt});
 
   try{
-    const cleanKey = apiKey.split('').filter(c=>c.charCodeAt(0)>=0x20&&c.charCodeAt(0)<=0x7E).join('').trim();
-
-    const resp = await fetch('https://api.anthropic.com/v1/messages',{
+    const resp = await fetch('/api/extract',{
       method:'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': cleanKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:6000, messages:[{role:'user', content:msgContent}]})
     });
     const data = await resp.json();
