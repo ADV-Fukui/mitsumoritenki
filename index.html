@@ -282,7 +282,7 @@ td input:focus,td select:focus{outline:none;border-color:#999}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="btn success" onclick="downloadExcel()">⬇ Excelをダウンロード</button>
+        <button class="btn success" onclick="downloadExcel()">⬇ 営業見積用Excelをダウンロード</button>
         <span class="dl-done" id="dlDone">✓ ダウンロード完了！</span>
       </div>
     </div>
@@ -852,6 +852,11 @@ async function _applyTemplate(wb, d) {
   const {kojiName,kojiClient,kojiPlace,koki,estNo,grand,pretax,tax,
          reiwaY,todayM,todayD,taxMode,taxNote,sheets} = d;
   const tplZip = await JSZip.loadAsync(_templateBuffer);
+  async function readZipText(path) {
+    const file = tplZip.file(path);
+    if (!file) throw new Error(`テンプレートに必要なファイルがありません：${path}`);
+    return file.async('string');
+  }
   function escX(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function setCell(xml, ref, type, val) {
     const esc = ref.replace(/[.*+?^=!:${}()|[\]/\\]/g,'\\$1');
@@ -874,8 +879,8 @@ async function _applyTemplate(wb, d) {
     if (rm) { return xml.replace(rowRe, `<row r="${rowNum}"${rm[1]}>${rm[2]}${build('')}</row>`); }
     return xml;
   }
-  const wbXml   = await tplZip.file('xl/workbook.xml').async('string');
-  const relsXml = await tplZip.file('xl/_rels/workbook.xml.rels').async('string');
+  const wbXml   = await readZipText('xl/workbook.xml');
+  const relsXml = await readZipText('xl/_rels/workbook.xml.rels');
   const nameToRid = {};
   for (const m of wbXml.matchAll(/<sheet name="([^"]+)"[^>]*r:id="([^"]+)"/g)) nameToRid[m[1]] = m[2];
   const ridToPath = {};
@@ -936,7 +941,7 @@ async function _applyTemplate(wb, d) {
   for (let i = 0; i < Math.min(sheets.length, 12); i++) {
     const p = sheetPath(`${i+1}内訳`);
     if (!p) continue;
-    let xml = await tplZip.file(p).async('string');
+    let xml = await readZipText(p);
     xml = setCell(xml, 'B2', 'is', sheets[i].name||sheets[i].key||'');
     const sheetItems = items.filter(it => it.sheet === sheets[i].key);
     const N = Math.min(sheetItems.length, 30);
@@ -964,7 +969,7 @@ async function _applyTemplate(wb, d) {
   }
   tplZip.remove('xl/calcChain.xml');
   {
-    let wbX = await tplZip.file('xl/workbook.xml').async('string');
+    let wbX = await readZipText('xl/workbook.xml');
     if (wbX.match(/<calcPr[^>]*\/>/)) {
       wbX = wbX.replace(/<calcPr([^>]*)\/>/, (m, attrs) => {
         if (attrs.includes('forceFullCalcOnLoad')) return m;
