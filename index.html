@@ -750,22 +750,9 @@ async function downloadSupervisorExcel(){
       if (!match) throw new Error(`テンプレートの${rowNumber}行目を読み取れません`);
       return match[0];
     };
-    const cloneRow = (source, target) => {
-      const parser = new DOMParser();
-      const serializer = new XMLSerializer();
-      const doc = parser.parseFromString(
-        `<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${source}</root>`,
-        'application/xml'
-      );
-      const row = doc.documentElement.firstElementChild;
-      if (!row || row.tagName !== 'row') throw new Error('テンプレートの行を複製できません');
-      row.setAttribute('r', String(target));
-      row.querySelectorAll('c[r]').forEach(cell => {
-        const match = cell.getAttribute('r').match(/^([A-Z]+)/);
-        if (match) cell.setAttribute('r', `${match[1]}${target}`);
-      });
-      return serializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
-    };
+    const cloneRow = (source, target) => source
+      .replace(/(<row\b[^>]*\br=")\d+(")/, `$1${target}$2`)
+      .replace(/(<c\b[^>]*\br="[A-Z]+)\d+(")/g, `$1${target}$2`);
     const headingTemplate = rowXml(5);
     const itemTemplate = rowXml(7);
     const subtotalTemplate = rowXml(37);
@@ -788,6 +775,7 @@ async function downloadSupervisorExcel(){
     groupedItems.forEach(group => {
       const heading = group.sheet.name || group.sheet.key || '内訳';
       generatedRows.push(putCell(headingTemplate, nextRow++, 'B5', 'is', heading));
+      generatedRows.push(cloneRow(rowXml(6), nextRow++));
       group.items.forEach(item => {
         const row = nextRow++;
         const amount = +item.amount || 0;
@@ -799,6 +787,7 @@ async function downloadSupervisorExcel(){
         xml = setCell(xml, `F${row}`, 'n', +item.unitPrice || 0);
         xml = setCell(xml, `G${row}`, 'n', amount);
         generatedRows.push(xml);
+        generatedRows.push(cloneRow(rowXml(8), nextRow++));
       });
     });
     const subtotalRow = nextRow++;
