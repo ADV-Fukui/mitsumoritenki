@@ -802,19 +802,66 @@ async function downloadSupervisorExcel(){
     const detailPath = sheetPath('内訳書');
     if (!detailPath) throw new Error('テンプレートに「内訳書」シートがありません');
     let detailXml = await readText(detailPath);
-    const sheet = sheets[0];
-    detailXml = setCell(detailXml, 'B5', 'is', sheet ? (sheet.name || sheet.key) : '内訳');
-    const detailRows = [7,9,11,13,15,17,19,21,23,25,27,29,31,33,35];
-    items.slice(0, detailRows.length).forEach((item, index) => {
-      const row = detailRows[index];
-      const amount = +item.amount || 0;
-      detailXml = setCell(detailXml, `B${row}`, 'is', item.name || '');
-      detailXml = setCell(detailXml, `C${row}`, 'is', item.memo || '');
-      detailXml = setCell(detailXml, `D${row}`, 'n', +item.qty || 1);
-      detailXml = setCell(detailXml, `E${row}`, 'is', item.unit || '式');
-      detailXml = setCell(detailXml, `F${row}`, 'n', (+item.unitPrice || 0));
-      detailXml = setCell(detailXml, `G${row}`, 'n', amount);
+    const rowXml = rowNumber => {
+      const match = detailXml.match(new RegExp(`<row r="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`));
+      if (!match) throw new Error(`テンプレートの${rowNumber}行目を読み取れません`);
+      return match[0];
+    };
+    const cloneRow = (source, target) => {
+      const parser = new DOMParser();
+      const serializer = new XMLSerializer();
+      const doc = parser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${source}</root>`, 'application/xml');
+      const row = doc.documentElement.firstElementChild;
+      if (!row || row.tagName !== 'row') throw new Error('テンプレートの行を複製できません');
+      row.setAttribute('r', String(target));
+      row.querySelectorAll('c[r]').forEach(cell => {
+        const match = cell.getAttribute('r').match(/^([A-Z]+)/);
+        if (match) cell.setAttribute('r', `${match[1]}${target}`);
+      });
+      return serializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
+    };
+    const headingTemplate = rowXml(5);
+    const spacerTemplate = rowXml(6);
+    const itemTemplate = rowXml(7);
+    const subtotalTemplate = rowXml(37);
+    const footerTemplate = rowXml(40);
+    const footerLabelTemplate = rowXml(41);
+    const groupedItems = sheets.flatMap(sheet => {
+      const sheetItems = items.filter(item => item.sheet === sheet.key);
+      return sheetItems.length ? [{sheet, items:sheetItems}] : [];
     });
+    const assigned = new Set(groupedItems.flatMap(group => group.items));
+    const ungrouped = items.filter(item => !assigned.has(item));
+    if (ungrouped.length) groupedItems.push({sheet:{key:'', name:'その他'}, items:ungrouped});
+    let nextRow = 5;
+    const generatedRows = [];
+    groupedItems.forEach(group => {
+      const heading = group.sheet.name || group.sheet.key || '内訳';
+      generatedRows.push(setCell(cloneRow(headingTemplate, nextRow), `B${nextRow}`, 'is', heading));
+      nextRow++;
+      generatedRows.push(cloneRow(spacerTemplate, nextRow++));
+      group.items.forEach(item => {
+        const row = nextRow++;
+        let itemRow = cloneRow(itemTemplate, row);
+        itemRow = setCell(itemRow, `B${row}`, 'is', item.name || '');
+        itemRow = setCell(itemRow, `C${row}`, 'is', item.memo || '');
+        itemRow = setCell(itemRow, `D${row}`, 'n', +item.qty || 1);
+        itemRow = setCell(itemRow, `E${row}`, 'is', item.unit || '式');
+        itemRow = setCell(itemRow, `F${row}`, 'n', +item.unitPrice || 0);
+        itemRow = setCell(itemRow, `G${row}`, 'n', +item.amount || 0);
+        generatedRows.push(itemRow);
+        generatedRows.push(cloneRow(spacerTemplate, nextRow++));
+      });
+    });
+    const subtotalRow = nextRow++;
+    generatedRows.push(setCell(cloneRow(subtotalTemplate, subtotalRow), `G${subtotalRow}`, 'n', total));
+    const footerRow = subtotalRow + 3;
+    generatedRows.push(cloneRow(footerTemplate, footerRow));
+    generatedRows.push(cloneRow(footerLabelTemplate, footerRow + 1));
+    const preservedRows = [...detailXml.matchAll(/<row r="([1-4])"[^>]*>[\s\S]*?<\/row>/g)].map(match => match[0]);
+    detailXml = detailXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, `<sheetData>${preservedRows.join('')}${generatedRows.join('')}</sheetData>`);
+    detailXml = detailXml.replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="A1:H${footerRow + 1}"/>`);
+    detailXml = detailXml.replace(/A41:H41/g, `A${footerRow + 1}:H${footerRow + 1}`);
     writeText(detailPath, detailXml);
 
     const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
