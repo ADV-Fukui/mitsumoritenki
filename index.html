@@ -1,18 +1,75 @@
 <!DOCTYPE html>
-    const sheet = sheets[0];
-    detailXml = setCell(detailXml, 'B5', 'is', sheet ? (sheet.name || sheet.key) : '内訳');
-    const detailRows = [7,9,11,13,15,17,19,21,23,25,27,29,31,33,35];
-    items.slice(0, detailRows.length).forEach((item, index) => {
-      const row = detailRows[index];
-      detailXml = setCell(detailXml, `B${row}`, 'is', item.name || '');
-      detailXml = setCell(detailXml, `C${row}`, 'is', item.memo || '');
-      detailXml = setCell(detailXml, `D${row}`, 'n', +item.qty || 1);
-      detailXml = setCell(detailXml, `E${row}`, 'is', item.unit || '式');
-      detailXml = setCell(detailXml, `F${row}`, 'n', +item.unitPrice || 0);
-      detailXml = setCell(detailXml, `G${row}`, 'n', +item.amount || 0);
-    });
-    detailXml = setCell(detailXml, 'G37', 'n', total);
-    writeText(detailPath, detailXml);
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>見積転記アプリ v2</title>
+<script src="/tenant-check.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;background:#f0efe8;min-height:100vh;color:#1a1a1a}
+.topbar{background:#1a1a1a;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar h1{font-size:15px;font-weight:500;letter-spacing:0.5px}
+.steps{background:#fff;border-bottom:1px solid #e0dfd8;padding:0 24px;display:flex;gap:0;overflow-x:auto}
+.step-tab{padding:12px 18px;font-size:13px;color:#aaa;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.step-tab.active{color:#1a1a1a;border-bottom-color:#1a1a1a;font-weight:500}
+.step-tab.done{color:#2d8f5a}
+.content{max-width:1400px;margin:0 auto;padding:20px 16px}
+.card{background:#fff;border:1px solid #e0dfd8;border-radius:12px;padding:20px;margin-bottom:14px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:14px;color:#1a1a1a}
+.card-sub{font-size:12px;color:#888;margin-bottom:12px;line-height:1.6}
+label{font-size:12px;color:#888;display:block;margin-bottom:4px}
+input[type=text],input[type=number],select{width:100%;font-size:14px;border:1px solid #ddd;border-radius:7px;padding:8px 10px;background:#fff;color:#1a1a1a;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#999}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{margin-bottom:12px}
+.drop-zone{border:1.5px dashed #ccc;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:background 0.15s}
+.drop-zone:hover,.drop-zone.drag{background:#f5f5f0;border-color:#999}
+.drop-zone p{font-size:13px;color:#888;margin-top:8px}
+.drop-zone span{font-size:11px;color:#bbb;margin-top:4px;display:block}
+.file-list{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.file-chip{display:flex;align-items:center;justify-content:space-between;font-size:12px;background:#f5f5f0;border:1px solid #e0dfd8;border-radius:7px;padding:7px 10px}
+.btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:8px 16px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#1a1a1a;cursor:pointer;transition:background 0.15s;font-family:inherit}
+.btn:hover{background:#f5f5f0}
+.btn.primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.btn.primary:hover{background:#333}
+.btn.success{background:#1a7a4a;color:#fff;border-color:#1a7a4a}
+.btn.success:hover{background:#166040}
+.btn.soft-danger{border-color:#f0a0a0;color:#c0392b}
+.btn-row{display:flex;justify-content:space-between;align-items:center;margin-top:16px}
+.sheet-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.sheet-tab-btn{font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid #ddd;background:#fff;cursor:pointer;transition:all 0.15s}
+.sheet-tab-btn.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.sheet-tab-btn.has-warn{border-color:#f0c040}
+.sheet-tab-btn.has-dup{border-color:#f08040}
+.item-table{width:100%;border-collapse:collapse;font-size:12px}
+.item-table th{font-weight:500;color:#888;padding:7px 6px;border-bottom:1px solid #eee;text-align:left;font-size:11px;white-space:nowrap;background:#faf9f5}
+.item-table td{padding:5px 4px;border-bottom:1px solid #f0f0f0;vertical-align:middle}
+.item-table tr:hover td{background:#faf9f5}
+td input,td select{font-size:12px;padding:3px 6px;border-radius:5px;border:1px solid #ddd;width:100%;background:#fff;font-family:inherit}
+td input:focus,td select:focus{outline:none;border-color:#999}
+.estimate-item-table th:nth-child(5){width:56px;min-width:56px}
+.estimate-item-table th:nth-child(6){width:108px;min-width:108px}
+.estimate-item-table th:nth-child(7){width:116px;min-width:116px}
+.estimate-item-table td:nth-child(5) input{min-width:44px}
+.estimate-item-table td:nth-child(6) input{min-width:96px}
+.estimate-item-table td:nth-child(7) input{min-width:104px}
+.badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;white-space:nowrap;display:inline-block}
+.badge.ok{background:#eaf7f1;color:#1a7a4a}
+.badge.warn{background:#fff8d6;color:#c07700}
+.badge.dup{background:#fff0e0;color:#c05000}
+.move-btn{font-size:10px;padding:2px 6px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;color:#666;font-family:inherit}
+.move-btn:hover{background:#f0f0f0}
+.loading-box{text-align:center;padding:32px}
+.spinner{width:28px;height:28px;border:2px solid #eee;border-top-color:#1a1a1a;border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-box p{font-size:13px;color:#888}
+.total-sticky{position:sticky;bottom:0;background:#f0efe8;padding:8px 0 4px;z-index:10;border-top:1px solid #e0dfd8;margin-top:8px}
+.total-inner{background:#fff;border:1px solid #e0dfd8;border-radius:10px;padding:10px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;max-width:1400px;margin:0 auto}
+.total-item{display:flex;gap:8px;align-items:center;font-size:13px;color:#666}
+.total-item.main{font-size:15px;font-weight:600;color:#1a1a1a}
 .profit-section{margin-bottom:16px}
 .profit-global{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .profit-global label{font-size:13px;color:#555;white-space:nowrap;margin-bottom:0}
@@ -227,9 +284,6 @@
       <div style="display:flex;align-items:center;gap:12px">
         <button class="btn success" onclick="downloadExcel()">⬇ 営業見積用Excelをダウンロード</button>
         <span class="dl-done" id="dlDone">✓ ダウンロード完了！</span>
-      </div>
-      <div style="margin-top:8px">
-        <button class="btn" onclick="downloadSupervisorExcel()">⬇ 監督見積用Excelをダウンロード</button>
       </div>
     </div>
     <div class="btn-row">
@@ -675,153 +729,6 @@ async function downloadExcel(){
   // ダウンロード
   XLSX.writeFile(wb, name+'_見積書.xlsx');
   document.getElementById('dlDone').style.display='inline';
-}
-
-// --- 監督見積Excel ---
-async function downloadSupervisorExcel(){
-  if (!items.length) { alert('明細項目がありません'); return; }
-  try {
-    const templateResp = await fetch(encodeURI('/見積書標準書式.xlsx'));
-    if (!templateResp.ok) throw new Error('監督見積用テンプレートを取得できませんでした');
-    const zip = await JSZip.loadAsync(await templateResp.arrayBuffer());
-    const kojiName = document.getElementById('kojiName').value || '見積書';
-    const kojiPlace = document.getElementById('kojiPlace').value || '';
-    const kojiClient = document.getElementById('kojiClient').value || '';
-    const estNo = document.getElementById('estNo').value || '';
-    const total = items.reduce((sum, item) => sum + (+item.amount || 0), 0);
-
-    function escapeXml(value){
-      return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-    }
-    function setCell(xml, ref, type, value){
-      const safeRef = ref.replace(/[.*+?^=!:${}()|[\]\\]/g,'\\$&');
-      const cellRe = new RegExp(`<c r="${safeRef}"([^>]*)>([\\s\\S]*?)</c>|<c r="${safeRef}"([^>]*)\\/>`);
-      const match = xml.match(cellRe);
-      const attrs = match ? (match[1] || match[3] || '') : '';
-      const style = (attrs.match(/s="[^"]+"/) || [''])[0];
-      let body = `<c r="${ref}" ${style}`;
-      if (type === 'n') body += `><v>${Number(value) || 0}</v></c>`;
-      else body += ` t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
-      if (match) return xml.replace(cellRe, body);
-      const row = ref.match(/^(.*?)(\d+)$/)[2];
-      const rowRe = new RegExp(`<row r="${row}"([^>]*)>([\\s\\S]*?)</row>`);
-      return xml.replace(rowRe, (full, rowAttrs, cells) =>
-        `<row r="${row}"${rowAttrs}>${cells}${body}</row>`);
-    }
-    async function readText(path){
-      const file = zip.file(path);
-      if (!file) throw new Error(`テンプレートに必要なシートがありません：${path}`);
-      return file.async('string');
-    }
-    function writeText(path, xml){ zip.file(path, xml); }
-    const workbookXml = await readText('xl/workbook.xml');
-    const relsXml = await readText('xl/_rels/workbook.xml.rels');
-    const sheetIds = {};
-    for (const match of workbookXml.matchAll(/<sheet name="([^"]+)"[^>]*r:id="([^"]+)"/g)) {
-      sheetIds[match[1]] = match[2];
-    }
-    const relationPaths = {};
-    for (const match of relsXml.matchAll(/<Relationship Id="([^"]+)"[^>]*Target="([^"]+)"/g)) {
-      if (match[2].includes('worksheets/')) {
-        relationPaths[match[1]] = 'xl/' + match[2].replace(/^\/?xl\//,'');
-      }
-    }
-    function sheetPath(name){ return relationPaths[sheetIds[name]]; }
-
-    const coverPath = sheetPath('表紙');
-    if (coverPath) {
-      let xml = await readText(coverPath);
-      xml = setCell(xml, 'G8', 'n', total);
-      xml = setCell(xml, 'G12', 'is', kojiName);
-      xml = setCell(xml, 'G13', 'is', kojiPlace);
-      xml = setCell(xml, 'G14', 'is', '');
-      xml = setCell(xml, 'G15', 'is', '');
-      xml = setCell(xml, 'G16', 'is', '');
-      xml = setCell(xml, 'G17', 'is', `発注者：${kojiClient}　見積番号：${estNo}`);
-      writeText(coverPath, xml);
-    }
-
-    const detailPath = sheetPath('内訳書');
-    if (!detailPath) throw new Error('テンプレートに「内訳書」シートがありません');
-    let detailXml = await readText(detailPath);
-    const rowXml = rowNumber => {
-      const match = detailXml.match(new RegExp(`<row r="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`));
-      if (!match) throw new Error(`テンプレートの${rowNumber}行目を読み取れません`);
-      return match[0];
-    };
-    const cloneRow = (source, target) => source
-      .replace(/(<row\b[^>]*\br=")\d+(")/, `$1${target}$2`)
-      .replace(/(<c\b[^>]*\br="[A-Z]+)\d+(")/g, `$1${target}$2`);
-    const headingTemplate = rowXml(5);
-    const itemTemplate = rowXml(7);
-    const subtotalTemplate = rowXml(37);
-    const footerTemplate = rowXml(40);
-    const footerLabelTemplate = rowXml(41);
-    const groupedItems = sheets.flatMap(sheet => {
-      const sheetItems = items.filter(item => item.sheet === sheet.key);
-      return sheetItems.length ? [{sheet, items:sheetItems}] : [];
-    });
-    const assigned = new Set(groupedItems.flatMap(group => group.items));
-    const ungrouped = items.filter(item => !assigned.has(item));
-    if (ungrouped.length) groupedItems.push({sheet:{key:'', name:'その他'}, items:ungrouped});
-
-    let nextRow = 5;
-    const generatedRows = [];
-    const putCell = (template, row, ref, type, value) => {
-      let xml = cloneRow(template, row);
-      return setCell(xml, ref.replace(/\d+$/, row), type, value);
-    };
-    groupedItems.forEach(group => {
-      const heading = group.sheet.name || group.sheet.key || '内訳';
-      generatedRows.push(putCell(headingTemplate, nextRow++, 'B5', 'is', heading));
-      generatedRows.push(cloneRow(rowXml(6), nextRow++));
-      group.items.forEach(item => {
-        const row = nextRow++;
-        const amount = +item.amount || 0;
-        let xml = cloneRow(itemTemplate, row);
-        xml = setCell(xml, `B${row}`, 'is', item.name || '');
-        xml = setCell(xml, `C${row}`, 'is', item.memo || '');
-        xml = setCell(xml, `D${row}`, 'n', +item.qty || 1);
-        xml = setCell(xml, `E${row}`, 'is', item.unit || '式');
-        xml = setCell(xml, `F${row}`, 'n', +item.unitPrice || 0);
-        xml = setCell(xml, `G${row}`, 'n', amount);
-        generatedRows.push(xml);
-        generatedRows.push(cloneRow(rowXml(8), nextRow++));
-      });
-    });
-    const subtotalRow = nextRow++;
-    let subtotalXml = cloneRow(subtotalTemplate, subtotalRow);
-    subtotalXml = setCell(subtotalXml, `B${subtotalRow}`, 'is', '小　　　計');
-    subtotalXml = setCell(subtotalXml, `G${subtotalRow}`, 'n', total);
-    generatedRows.push(subtotalXml);
-    const footerRow = nextRow + 2;
-    generatedRows.push(cloneRow(footerTemplate, footerRow));
-    generatedRows.push(cloneRow(footerLabelTemplate, footerRow + 1));
-    const preservedRows = [...detailXml.matchAll(/<row r="([1-4])"[^>]*>[\s\S]*?<\/row>/g)].map(match => match[0]);
-    detailXml = detailXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/,
-      `<sheetData>${preservedRows.join('')}${generatedRows.join('')}</sheetData>`);
-    detailXml = detailXml.replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="A1:H${footerRow + 1}"/>`);
-    detailXml = detailXml.replace(/A41:H41/g, `A${footerRow + 1}:H${footerRow + 1}`);
-    writeText(detailPath, detailXml);
-
-    const summaryPath = sheetPath('総括表');
-    if (summaryPath && sheets[0]) {
-      let summaryXml = await readText(summaryPath);
-      summaryXml = setCell(summaryXml, 'B11', 'is', sheets[0].name || sheets[0].key || '');
-      writeText(summaryPath, summaryXml);
-    }
-
-    const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${kojiName}_監督見積書.xlsx`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  } catch (error) {
-    alert('監督見積用Excelの作成でエラーが発生しました：' + error.message);
-  }
 }
 
 // --- 予算管理Excel ---
