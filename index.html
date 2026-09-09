@@ -802,20 +802,70 @@ async function downloadSupervisorExcel(){
     const detailPath = sheetPath('内訳書');
     if (!detailPath) throw new Error('テンプレートに「内訳書」シートがありません');
     let detailXml = await readText(detailPath);
-    const sheet = sheets[0];
-    detailXml = setCell(detailXml, 'B5', 'is', sheet ? (sheet.name || sheet.key) : '内訳');
-    const detailRows = [7,9,11,13,15,17,19,21,23,25,27,29,31,33,35];
-    items.slice(0, detailRows.length).forEach((item, index) => {
-      const row = detailRows[index];
-      const amount = +item.amount || 0;
-      detailXml = setCell(detailXml, `B${row}`, 'is', item.name || '');
-      detailXml = setCell(detailXml, `C${row}`, 'is', item.memo || '');
-      detailXml = setCell(detailXml, `D${row}`, 'n', +item.qty || 1);
-      detailXml = setCell(detailXml, `E${row}`, 'is', item.unit || '式');
-      detailXml = setCell(detailXml, `F${row}`, 'n', (+item.unitPrice || 0));
-      detailXml = setCell(detailXml, `G${row}`, 'n', amount);
+    const rowXml = rowNumber => {
+      const match = detailXml.match(new RegExp(`<row r="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`));
+      if (!match) throw new Error(`テンプレートの${rowNumber}行目を読み取れません`);
+      return match[0];
+    };
+    const cloneRow = (source, target) => source
+      .replace(new RegExp(`(<row[^>]*\\sr=")${source.match(/r="(\d+)"/)[1]}("[^>]*>)`), `$1${target}$2`)
+      .replace(/([A-Z]+)\d+/g, `$1${target}`);
+    const headingTemplate = rowXml(5);
+    const itemTemplate = rowXml(7);
+    const subtotalTemplate = rowXml(37);
+    const footerTemplate = rowXml(40);
+    const footerLabelTemplate = rowXml(41);
+    const groupedItems = sheets.flatMap(sheet => {
+      const sheetItems = items.filter(item => item.sheet === sheet.key);
+      return sheetItems.length ? [{sheet, items:sheetItems}] : [];
     });
+    const assigned = new Set(groupedItems.flatMap(group => group.items));
+    const ungrouped = items.filter(item => !assigned.has(item));
+    if (ungrouped.length) groupedItems.push({sheet:{key:'', name:'その他'}, items:ungrouped});
+
+    let nextRow = 5;
+    const generatedRows = [];
+    const putCell = (template, row, ref, type, value) => {
+      let xml = cloneRow(template, row);
+      return setCell(xml, ref.replace(/\d+$/, row), type, value);
+    };
+    groupedItems.forEach(group => {
+      const heading = group.sheet.name || group.sheet.key || '内訳';
+      generatedRows.push(putCell(headingTemplate, nextRow++, 'B5', 'is', heading));
+      group.items.forEach(item => {
+        const row = nextRow++;
+        const amount = +item.amount || 0;
+        let xml = cloneRow(itemTemplate, row);
+        xml = setCell(xml, `B${row}`, 'is', item.name || '');
+        xml = setCell(xml, `C${row}`, 'is', item.memo || '');
+        xml = setCell(xml, `D${row}`, 'n', +item.qty || 1);
+        xml = setCell(xml, `E${row}`, 'is', item.unit || '式');
+        xml = setCell(xml, `F${row}`, 'n', +item.unitPrice || 0);
+        xml = setCell(xml, `G${row}`, 'n', amount);
+        generatedRows.push(xml);
+      });
+    });
+    const subtotalRow = nextRow++;
+    let subtotalXml = cloneRow(subtotalTemplate, subtotalRow);
+    subtotalXml = setCell(subtotalXml, `B${subtotalRow}`, 'is', '小　　　計');
+    subtotalXml = setCell(subtotalXml, `G${subtotalRow}`, 'n', total);
+    generatedRows.push(subtotalXml);
+    const footerRow = nextRow + 2;
+    generatedRows.push(cloneRow(footerTemplate, footerRow));
+    generatedRows.push(cloneRow(footerLabelTemplate, footerRow + 1));
+    const preservedRows = [...detailXml.matchAll(/<row r="([1-4])"[^>]*>[\s\S]*?<\/row>/g)].map(match => match[0]);
+    detailXml = detailXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/,
+      `<sheetData>${preservedRows.join('')}${generatedRows.join('')}</sheetData>`);
+    detailXml = detailXml.replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="A1:H${footerRow + 1}"/>`);
+    detailXml = detailXml.replace(/A41:H41/g, `A${footerRow + 1}:H${footerRow + 1}`);
     writeText(detailPath, detailXml);
+
+    const summaryPath = sheetPath('総括表');
+    if (summaryPath && sheets[0]) {
+      let summaryXml = await readText(summaryPath);
+      summaryXml = setCell(summaryXml, 'B11', 'is', sheets[0].name || sheets[0].key || '');
+      writeText(summaryPath, summaryXml);
+    }
 
     const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
