@@ -802,15 +802,18 @@ async function downloadSupervisorExcel(){
     const detailPath = sheetPath('内訳書');
     if (!detailPath) throw new Error('テンプレートに「内訳書」シートがありません');
     let detailXml = await readText(detailPath);
+    const xmlParser = new DOMParser();
+    const xmlSerializer = new XMLSerializer();
+    const detailDoc = xmlParser.parseFromString(detailXml, 'application/xml');
+    if (detailDoc.querySelector('parsererror')) throw new Error('内訳書テンプレートのXMLを読み込めません');
     const rowXml = rowNumber => {
-      const match = detailXml.match(new RegExp(`<row r="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`));
-      if (!match) throw new Error(`テンプレートの${rowNumber}行目を読み取れません`);
-      return match[0];
+      const row = Array.from(detailDoc.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'row'))
+        .find(candidate => candidate.getAttribute('r') === String(rowNumber));
+      if (!row) throw new Error(`テンプレートの${rowNumber}行目を読み取れません`);
+      return xmlSerializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
     };
     const cloneRow = (source, target) => {
-      const parser = new DOMParser();
-      const serializer = new XMLSerializer();
-      const doc = parser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${source}</root>`, 'application/xml');
+      const doc = xmlParser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${source}</root>`, 'application/xml');
       const row = doc.documentElement.firstElementChild;
       if (!row || row.tagName !== 'row') throw new Error('テンプレートの行を複製できません');
       row.setAttribute('r', String(target));
@@ -818,7 +821,7 @@ async function downloadSupervisorExcel(){
         const match = cell.getAttribute('r').match(/^([A-Z]+)/);
         if (match) cell.setAttribute('r', `${match[1]}${target}`);
       });
-      return serializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
+      return xmlSerializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
     };
     const headingTemplate = rowXml(5);
     const spacerTemplate = rowXml(6);
