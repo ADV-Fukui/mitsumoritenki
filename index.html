@@ -285,6 +285,9 @@ td input:focus,td select:focus{outline:none;border-color:#999}
         <button class="btn success" onclick="downloadExcel()">⬇ 営業見積用Excelをダウンロード</button>
         <span class="dl-done" id="dlDone">✓ ダウンロード完了！</span>
       </div>
+      <div style="margin-top:8px">
+        <button class="btn" onclick="downloadSupervisorExcel()">⬇ 監督見積用Excelをダウンロード</button>
+      </div>
     </div>
     <div class="btn-row">
       <button class="btn" onclick="goStep(4)">← 戻る</button>
@@ -729,6 +732,101 @@ async function downloadExcel(){
   // ダウンロード
   XLSX.writeFile(wb, name+'_見積書.xlsx');
   document.getElementById('dlDone').style.display='inline';
+}
+
+// --- 監督見積Excel ---
+async function downloadSupervisorExcel(){
+  if (!items.length) { alert('明細項目がありません'); return; }
+  try {
+    const templateResp = await fetch(encodeURI('/見積書標準書式.xlsx'));
+    if (!templateResp.ok) throw new Error('監督見積用テンプレートを取得できませんでした');
+    const zip = await JSZip.loadAsync(await templateResp.arrayBuffer());
+    const kojiName = document.getElementById('kojiName').value || '見積書';
+    const kojiPlace = document.getElementById('kojiPlace').value || '';
+    const kojiClient = document.getElementById('kojiClient').value || '';
+    const estNo = document.getElementById('estNo').value || '';
+    const total = items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+
+    function escapeXml(value){
+      return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+    }
+    function setCell(xml, ref, type, value){
+      const safeRef = ref.replace(/[.*+?^=!:${}()|[\]\\]/g,'\\$&');
+      const cellRe = new RegExp(`<c r="${safeRef}"([^>]*)>([\\s\\S]*?)</c>|<c r="${safeRef}"([^>]*)\\/>`);
+      const match = xml.match(cellRe);
+      const attrs = match ? (match[1] || match[3] || '') : '';
+      const style = (attrs.match(/s="[^"]+"/) || [''])[0];
+      let body = `<c r="${ref}" ${style}`;
+      if (type === 'n') body += `><v>${Number(value) || 0}</v></c>`;
+      else body += ` t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+      if (match) return xml.replace(cellRe, body);
+      const row = ref.match(/^(.*?)(\d+)$/)[2];
+      const rowRe = new RegExp(`<row r="${row}"([^>]*)>([\\s\\S]*?)</row>`);
+      return xml.replace(rowRe, (full, rowAttrs, cells) =>
+        `<row r="${row}"${rowAttrs}>${cells}${body}</row>`);
+    }
+    async function readText(path){
+      const file = zip.file(path);
+      if (!file) throw new Error(`テンプレートに必要なシートがありません：${path}`);
+      return file.async('string');
+    }
+    function writeText(path, xml){ zip.file(path, xml); }
+    const workbookXml = await readText('xl/workbook.xml');
+    const relsXml = await readText('xl/_rels/workbook.xml.rels');
+    const sheetIds = {};
+    for (const match of workbookXml.matchAll(/<sheet name="([^"]+)"[^>]*r:id="([^"]+)"/g)) {
+      sheetIds[match[1]] = match[2];
+    }
+    const relationPaths = {};
+    for (const match of relsXml.matchAll(/<Relationship Id="([^"]+)"[^>]*Target="([^"]+)"/g)) {
+      if (match[2].includes('worksheets/')) {
+        relationPaths[match[1]] = 'xl/' + match[2].replace(/^\/?xl\//,'');
+      }
+    }
+    function sheetPath(name){ return relationPaths[sheetIds[name]]; }
+
+    const coverPath = sheetPath('表紙');
+    if (coverPath) {
+      let xml = await readText(coverPath);
+      xml = setCell(xml, 'G8', 'n', total);
+      xml = setCell(xml, 'G12', 'is', kojiName);
+      xml = setCell(xml, 'G13', 'is', kojiPlace);
+      xml = setCell(xml, 'G14', 'is', '');
+      xml = setCell(xml, 'G15', 'is', '');
+      xml = setCell(xml, 'G16', 'is', '');
+      xml = setCell(xml, 'G17', 'is', `発注者：${kojiClient}　見積番号：${estNo}`);
+      writeText(coverPath, xml);
+    }
+
+    const detailPath = sheetPath('内訳書');
+    if (!detailPath) throw new Error('テンプレートに「内訳書」シートがありません');
+    let detailXml = await readText(detailPath);
+    const sheet = sheets[0];
+    detailXml = setCell(detailXml, 'B5', 'is', sheet ? (sheet.name || sheet.key) : '内訳');
+    const detailRows = [7,9,11,13,15,17,19,21,23,25,27,29,31,33,35];
+    items.slice(0, detailRows.length).forEach((item, index) => {
+      const row = detailRows[index];
+      const amount = +item.amount || 0;
+      detailXml = setCell(detailXml, `B${row}`, 'is', item.name || '');
+      detailXml = setCell(detailXml, `C${row}`, 'is', item.memo || '');
+      detailXml = setCell(detailXml, `D${row}`, 'n', +item.qty || 1);
+      detailXml = setCell(detailXml, `E${row}`, 'is', item.unit || '式');
+      detailXml = setCell(detailXml, `F${row}`, 'n', (+item.unitPrice || 0));
+      detailXml = setCell(detailXml, `G${row}`, 'n', amount);
+    });
+    writeText(detailPath, detailXml);
+
+    const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${kojiName}_監督見積書.xlsx`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (error) {
+    alert('監督見積用Excelの作成でエラーが発生しました：' + error.message);
+  }
 }
 
 // --- 予算管理Excel ---
