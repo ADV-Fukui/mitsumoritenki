@@ -176,6 +176,7 @@ td input:focus,td select:focus{outline:none;border-color:#999}
         <span style="background:#fff0e0;color:#c05000;font-size:11px;padding:2px 7px;border-radius:4px;font-weight:600;margin-left:8px">🟠 重複候補</span>　複数社で類似項目あり
       </p>
       <div class="sheet-tabs" id="sheetTabs"></div>
+      <div id="activeSheetSubtotal" style="font-size:13px;font-weight:600;color:#1a1a1a;margin:4px 0 10px;padding:8px 10px;background:#f5f5f0;border:1px solid #e0dfd8;border-radius:7px"></div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
         <button class="btn" onclick="addItem()">＋ 行を追加</button>
       </div>
@@ -533,14 +534,24 @@ function renderSheetTabs(){
   }
   sheets.forEach(s=>{
     const si = items.filter(it=>it.sheet===s.key);
+    const subtotal = si.reduce((sum,it)=>sum+(+it.amount||0),0);
     const btn = document.createElement('button');
     btn.className = 'sheet-tab-btn' + (activeSheet===s.key?' active':'');
     if(si.some(it=>it.status==='dup')) btn.classList.add('has-dup');
     else if(si.some(it=>it.status==='warn')) btn.classList.add('has-warn');
-    btn.textContent = `${s.key}：${s.name}`;
+    btn.textContent = `${s.key}：${s.name}（¥${fmt(subtotal)}）`;
     btn.onclick = ()=>{ activeSheet=s.key; renderSheetTabs(); renderItemTable(); };
     c.appendChild(btn);
   });
+  const active = sheets.find(s=>s.key===activeSheet);
+  const activeSubtotal = items.filter(it=>it.sheet===activeSheet)
+    .reduce((sum,it)=>sum+(+it.amount||0),0);
+  const subtotalBox = document.getElementById('activeSheetSubtotal');
+  if(subtotalBox){
+    subtotalBox.textContent = active
+      ? `${active.key}：${active.name} の小計　¥${fmt(activeSubtotal)}`
+      : '大項目を選択してください';
+  }
 }
 
 function renderItemTable(){
@@ -888,7 +899,17 @@ async function downloadSupervisorExcel(){
     const kojiPlace = document.getElementById('kojiPlace').value || '';
     const kojiClient = document.getElementById('kojiClient').value || '';
     const estNo = document.getElementById('estNo').value || '';
-    const total = items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+    const exportItems = items.map(item => ({
+      ...item,
+      name: String(item.name || ''),
+      memo: String(item.memo || ''),
+      qty: Number(item.qty) || 0,
+      unit: String(item.unit || ''),
+      unitPrice: Number(item.unitPrice) || 0,
+      amount: Number(item.amount) || 0,
+      vendor: String(item.vendor || '')
+    }));
+    const total = exportItems.reduce((sum, item) => sum + item.amount, 0);
 
     function escapeXml(value){
       return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -989,25 +1010,34 @@ async function downloadSupervisorExcel(){
     const subtotalTemplate = rowXml(37);
     const footerTemplate = rowXml(40);
     const footerLabelTemplate = rowXml(41);
+    const titleTemplate = rowXml(2);
+    const headerTemplate = rowXml(3);
     const groupedItems = sheets.map(sheet => ({
       sheet,
-      items: items.filter(item => item.sheet === sheet.key)
+      items: exportItems.filter(item => item.sheet === sheet.key)
     }));
     const assigned = new Set(groupedItems.flatMap(group => group.items));
-    const ungrouped = items.filter(item => !assigned.has(item));
+    const ungrouped = exportItems.filter(item => !assigned.has(item));
     if (ungrouped.length) groupedItems.push({sheet:{key:'', name:'その他'}, items:ungrouped});
     function buildDetailXml(group){
-      const pageSize = 18;
+      const pageSize = 17;
       const generatedRows = [];
       const pageCount = Math.max(1, Math.ceil(group.items.length / pageSize));
-      let nextRow = 5;
       for(let page=0; page<pageCount; page++){
         const pageItems = group.items.slice(page * pageSize, (page + 1) * pageSize);
-        generatedRows.push(setCell(cloneRow(headingTemplate, nextRow), `B${nextRow}`, 'is', group.sheet.name || group.sheet.key || '内訳'));
-        nextRow++;
-        generatedRows.push(cloneRow(spacerTemplate, nextRow++));
-        pageItems.forEach(item => {
-          const row = nextRow++;
+        const firstPage = page === 0;
+        const pageStart = firstPage ? 5 : 43 + (page - 1) * 40;
+        let itemRow = firstPage ? pageStart + 2 : pageStart + 3;
+        if(firstPage){
+          generatedRows.push(setCell(cloneRow(headingTemplate, pageStart), `B${pageStart}`, 'is', group.sheet.name || group.sheet.key || '内訳'));
+          generatedRows.push(cloneRow(spacerTemplate, pageStart + 1));
+        } else {
+          generatedRows.push(cloneRow(titleTemplate, pageStart));
+          generatedRows.push(cloneRow(headerTemplate, pageStart + 1));
+          generatedRows.push(cloneRow(spacerTemplate, pageStart + 2));
+        }
+        pageItems.forEach((item, itemIndex) => {
+          const row = itemRow;
           let itemRow = cloneRow(itemTemplate, row);
           itemRow = setCell(itemRow, `B${row}`, 'is', item.name || '');
           itemRow = setCell(itemRow, `C${row}`, 'is', item.memo || '');
@@ -1015,24 +1045,35 @@ async function downloadSupervisorExcel(){
           itemRow = setCell(itemRow, `E${row}`, 'is', item.unit || '式');
           itemRow = setCell(itemRow, `F${row}`, 'n', +item.unitPrice || 0);
           itemRow = setCell(itemRow, `G${row}`, 'n', +item.amount || 0);
+          itemRow = setCell(itemRow, `H${row}`, 'is', item.vendor || '');
           generatedRows.push(itemRow);
-          generatedRows.push(cloneRow(spacerTemplate, nextRow++));
+          if(!firstPage || itemIndex < pageSize - 1){
+            generatedRows.push(cloneRow(spacerTemplate, row + 1));
+          }
+          itemRow += 2;
         });
         for(let i=pageItems.length; i<pageSize; i++){
-          generatedRows.push(cloneRow(itemTemplate, nextRow++));
-          generatedRows.push(cloneRow(spacerTemplate, nextRow++));
+          generatedRows.push(cloneRow(itemTemplate, itemRow));
+          if(!firstPage || i < pageSize - 1){
+            generatedRows.push(cloneRow(spacerTemplate, itemRow + 1));
+          }
+          itemRow += 2;
         }
         if(page === pageCount - 1){
-          const subtotalRow = nextRow++;
+          const subtotalRow = firstPage ? pageStart + 35 : pageStart + 37;
           const subtotal = group.items.reduce((sum, item) => sum + (+item.amount || 0), 0);
           generatedRows.push(setCell(cloneRow(subtotalTemplate, subtotalRow), `G${subtotalRow}`, 'n', subtotal));
+          generatedRows.push(cloneRow(footerTemplate, subtotalRow + 2));
+          generatedRows.push(cloneRow(footerLabelTemplate, subtotalRow + 3));
+        } else if(firstPage){
+          generatedRows.push(cloneRow(footerTemplate, pageStart + 35));
+          generatedRows.push(cloneRow(footerLabelTemplate, pageStart + 36));
         } else {
-          nextRow++;
+          generatedRows.push(cloneRow(footerTemplate, pageStart + 39));
+          generatedRows.push(cloneRow(footerLabelTemplate, pageStart + 40));
         }
       }
-      const footerRow = nextRow + 2;
-      generatedRows.push(cloneRow(footerTemplate, footerRow));
-      generatedRows.push(cloneRow(footerLabelTemplate, footerRow + 1));
+      const footerRow = pageCount === 1 ? 42 : 43 + (pageCount - 1) * 40 + 39;
       const preservedRows = [...detailTemplateXml.matchAll(/<row r="([1-4])"[^>]*>[\s\S]*?<\/row>/g)].map(match => match[0]);
       let xml = detailTemplateXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, `<sheetData>${preservedRows.join('')}${generatedRows.join('')}</sheetData>`);
       xml = xml.replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="A1:H${footerRow + 1}"/>`);
