@@ -829,6 +829,23 @@ async function downloadSupervisorExcel(){
     }
     function sheetPath(name){ return relationPaths[sheetIds[name]]; }
 
+    function maxNumber(values, fallback){
+      const numbers = values.map(value => Number(value)).filter(Number.isFinite);
+      return numbers.length ? Math.max(...numbers) : fallback;
+    }
+
+    function uniqueSheetName(name, usedNames){
+      const base = String(name || '内訳').replace(/[\\/?*\[\]:]/g, ' ').trim().slice(0,31) || '内訳';
+      let candidate = base;
+      let suffix = 2;
+      while (usedNames.has(candidate)) {
+        const tail = ` (${suffix++})`;
+        candidate = `${base.slice(0, 31 - tail.length)}${tail}`;
+      }
+      usedNames.add(candidate);
+      return candidate;
+    }
+
     const coverPath = sheetPath('表紙');
     if (coverPath) {
       let xml = await readText(coverPath);
@@ -842,12 +859,12 @@ async function downloadSupervisorExcel(){
       writeText(coverPath, xml);
     }
 
-    const detailPath = sheetPath('内訳書');
-    if (!detailPath) throw new Error('テンプレートに「内訳書」シートがありません');
-    let detailXml = await readText(detailPath);
+    const detailTemplatePath = sheetPath('内訳書');
+    if (!detailTemplatePath) throw new Error('テンプレートに「内訳書」シートがありません');
+    const detailTemplateXml = await readText(detailTemplatePath);
     const xmlParser = new DOMParser();
     const xmlSerializer = new XMLSerializer();
-    const detailDoc = xmlParser.parseFromString(detailXml, 'application/xml');
+    const detailDoc = xmlParser.parseFromString(detailTemplateXml, 'application/xml');
     if (detailDoc.querySelector('parsererror')) throw new Error('内訳書テンプレートのXMLを読み込めません');
     const rowXml = rowNumber => {
       const row = Array.from(detailDoc.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'row'))
@@ -879,36 +896,120 @@ async function downloadSupervisorExcel(){
     const assigned = new Set(groupedItems.flatMap(group => group.items));
     const ungrouped = items.filter(item => !assigned.has(item));
     if (ungrouped.length) groupedItems.push({sheet:{key:'', name:'その他'}, items:ungrouped});
-    let nextRow = 5;
-    const generatedRows = [];
-    groupedItems.forEach(group => {
-      const heading = group.sheet.name || group.sheet.key || '内訳';
-      generatedRows.push(setCell(cloneRow(headingTemplate, nextRow), `B${nextRow}`, 'is', heading));
-      nextRow++;
-      generatedRows.push(cloneRow(spacerTemplate, nextRow++));
-      group.items.forEach(item => {
-        const row = nextRow++;
-        let itemRow = cloneRow(itemTemplate, row);
-        itemRow = setCell(itemRow, `B${row}`, 'is', item.name || '');
-        itemRow = setCell(itemRow, `C${row}`, 'is', item.memo || '');
-        itemRow = setCell(itemRow, `D${row}`, 'n', +item.qty || 1);
-        itemRow = setCell(itemRow, `E${row}`, 'is', item.unit || '式');
-        itemRow = setCell(itemRow, `F${row}`, 'n', +item.unitPrice || 0);
-        itemRow = setCell(itemRow, `G${row}`, 'n', +item.amount || 0);
-        generatedRows.push(itemRow);
+    function buildDetailXml(group){
+      const pageSize = 18;
+      const generatedRows = [];
+      const pageCount = Math.max(1, Math.ceil(group.items.length / pageSize));
+      let nextRow = 5;
+      for(let page=0; page<pageCount; page++){
+        const pageItems = group.items.slice(page * pageSize, (page + 1) * pageSize);
+        generatedRows.push(setCell(cloneRow(headingTemplate, nextRow), `B${nextRow}`, 'is', group.sheet.name || group.sheet.key || '内訳'));
+        nextRow++;
         generatedRows.push(cloneRow(spacerTemplate, nextRow++));
-      });
+        pageItems.forEach(item => {
+          const row = nextRow++;
+          let itemRow = cloneRow(itemTemplate, row);
+          itemRow = setCell(itemRow, `B${row}`, 'is', item.name || '');
+          itemRow = setCell(itemRow, `C${row}`, 'is', item.memo || '');
+          itemRow = setCell(itemRow, `D${row}`, 'n', +item.qty || 1);
+          itemRow = setCell(itemRow, `E${row}`, 'is', item.unit || '式');
+          itemRow = setCell(itemRow, `F${row}`, 'n', +item.unitPrice || 0);
+          itemRow = setCell(itemRow, `G${row}`, 'n', +item.amount || 0);
+          generatedRows.push(itemRow);
+          generatedRows.push(cloneRow(spacerTemplate, nextRow++));
+        });
+        for(let i=pageItems.length; i<pageSize; i++){
+          generatedRows.push(cloneRow(itemTemplate, nextRow++));
+          generatedRows.push(cloneRow(spacerTemplate, nextRow++));
+        }
+        if(page === pageCount - 1){
+          const subtotalRow = nextRow++;
+          const subtotal = group.items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+          generatedRows.push(setCell(cloneRow(subtotalTemplate, subtotalRow), `G${subtotalRow}`, 'n', subtotal));
+        } else {
+          nextRow++;
+        }
+      }
+      const footerRow = nextRow + 2;
+      generatedRows.push(cloneRow(footerTemplate, footerRow));
+      generatedRows.push(cloneRow(footerLabelTemplate, footerRow + 1));
+      const preservedRows = [...detailTemplateXml.matchAll(/<row r="([1-4])"[^>]*>[\s\S]*?<\/row>/g)].map(match => match[0]);
+      let xml = detailTemplateXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, `<sheetData>${preservedRows.join('')}${generatedRows.join('')}</sheetData>`);
+      xml = xml.replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="A1:H${footerRow + 1}"/>`);
+      xml = xml.replace(/A41:H41/g, `A${footerRow + 1}:H${footerRow + 1}`);
+      return xml;
+    }
+
+    const templateRelPath = `xl/worksheets/_rels/${detailTemplatePath.split('/').pop()}.rels`;
+    const templateRel = zip.file(templateRelPath);
+    const templateRelXml = templateRel ? await templateRel.async('string') : null;
+    const existingNames = new Set(Object.keys(sheetIds));
+    const existingSheetIds = [...workbookXml.matchAll(/<sheet name="[^"]+"[^>]*sheetId="(\d+)"/g)].map(match => match[1]);
+    const detailSheetId = workbookXml.match(new RegExp(`<sheet name="内訳書"[^>]*sheetId="(\\d+)"`))?.[1] || '1';
+    const nextSheetId = maxNumber(existingSheetIds, 0) + 1;
+    const existingRelIds = Object.keys(relationPaths).map(id => id.replace('rId',''));
+    const nextRelNumber = maxNumber(existingRelIds, 0) + 1;
+    const existingSheetPaths = Object.values(relationPaths);
+    const nextSheetNumber = maxNumber(existingSheetPaths.map(path => path.match(/sheet(\d+)\.xml$/)?.[1]), 0) + 1;
+    let contentTypesXml = await readText('[Content_Types].xml');
+    let workbookOut = workbookXml;
+    let relsOut = relsXml;
+    const outputSheetNames = [];
+    groupedItems.forEach((group, index) => {
+      const outputName = uniqueSheetName(group.sheet.name || group.sheet.key || '内訳', existingNames);
+      outputSheetNames.push(outputName);
+      const sheetPathOut = index === 0 ? detailTemplatePath : `xl/worksheets/sheet${nextSheetNumber + index - 1}.xml`;
+      const relId = index === 0 ? sheetIds['内訳書'] : `rId${nextRelNumber + index - 1}`;
+      if(index > 0){
+        zip.file(sheetPathOut, buildDetailXml(group));
+        if(templateRelXml) zip.file(`xl/worksheets/_rels/${sheetPathOut.split('/').pop()}.rels`, templateRelXml);
+        relsOut = relsOut.replace('</Relationships>', `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/${sheetPathOut.split('/').pop()}"/></Relationships>`);
+        contentTypesXml = contentTypesXml.replace('</Types>', `<Override PartName="/${sheetPathOut}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
+      } else {
+        writeText(sheetPathOut, buildDetailXml(group));
+      }
+      workbookOut = workbookOut.replace(`<sheet name="内訳書" sheetId="${detailSheetId}" r:id="${sheetIds['内訳書']}"/>`, `<sheet name="${escapeXml(outputName)}" sheetId="${index === 0 ? detailSheetId : nextSheetId + index - 1}" r:id="${relId}"/>`);
+      if(index > 0){
+        workbookOut = workbookOut.replace('</sheets>', `<sheet name="${escapeXml(outputName)}" sheetId="${nextSheetId + index - 1}" r:id="${relId}"/></sheets>`);
+      }
     });
-    const subtotalRow = nextRow++;
-    generatedRows.push(setCell(cloneRow(subtotalTemplate, subtotalRow), `G${subtotalRow}`, 'n', total));
-    const footerRow = subtotalRow + 3;
-    generatedRows.push(cloneRow(footerTemplate, footerRow));
-    generatedRows.push(cloneRow(footerLabelTemplate, footerRow + 1));
-    const preservedRows = [...detailXml.matchAll(/<row r="([1-4])"[^>]*>[\s\S]*?<\/row>/g)].map(match => match[0]);
-    detailXml = detailXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, `<sheetData>${preservedRows.join('')}${generatedRows.join('')}</sheetData>`);
-    detailXml = detailXml.replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="A1:H${footerRow + 1}"/>`);
-    detailXml = detailXml.replace(/A41:H41/g, `A${footerRow + 1}:H${footerRow + 1}`);
-    writeText(detailPath, detailXml);
+    if(!groupedItems.length) throw new Error('工種に割り当てられた明細項目がありません');
+    workbookOut = workbookOut.replace(/内訳書!/g, `${escapeXml(outputSheetNames[0])}!`);
+
+    // 総括表は工種ごとの合計を1行ずつ出力する。
+    const summaryPath = sheetPath('総括表');
+    if(summaryPath){
+      let summaryXml = await readText(summaryPath);
+      const summaryDoc = xmlParser.parseFromString(summaryXml, 'application/xml');
+      const summaryRowTemplate = Array.from(summaryDoc.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'row'))
+        .find(row => row.getAttribute('r') === '11');
+      if(summaryRowTemplate){
+        const summaryRowXml = xmlSerializer.serializeToString(summaryRowTemplate).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
+        const summaryRows = groupedItems.map((group, index) => {
+          const row = 11 + index;
+          const subtotal = group.items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+          let rowXml = cloneRow(summaryRowXml, row);
+          rowXml = setCell(rowXml, `A${row}`, 'is', String(index + 1));
+          rowXml = setCell(rowXml, `B${row}`, 'is', group.sheet.name || group.sheet.key || '内訳');
+          rowXml = setCell(rowXml, `D${row}`, 'n', 1);
+          rowXml = setCell(rowXml, `E${row}`, 'is', '式');
+          rowXml = setCell(rowXml, `G${row}`, 'n', subtotal);
+          return rowXml;
+        });
+        const totalRow = 11 + groupedItems.length;
+        let totalXml = cloneRow(summaryRowXml, totalRow);
+        totalXml = setCell(totalXml, `B${totalRow}`, 'is', '合計');
+        totalXml = setCell(totalXml, `G${totalRow}`, 'n', total);
+        summaryXml = summaryXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, match => {
+          const headerRows = [...match.matchAll(/<row r="([1-9]|10)"[^>]*>[\s\S]*?<\/row>/g)].map(row => row[0]);
+          return `<sheetData>${headerRows.join('')}${summaryRows.join('')}${totalXml}</sheetData>`;
+        });
+        writeText(summaryPath, summaryXml);
+      }
+    }
+    writeText('xl/workbook.xml', workbookOut);
+    writeText('xl/_rels/workbook.xml.rels', relsOut);
+    writeText('[Content_Types].xml', contentTypesXml);
 
     const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
