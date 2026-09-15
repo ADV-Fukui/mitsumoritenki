@@ -1043,6 +1043,7 @@ async function downloadSupervisorExcel(){
     function buildDetailXml(group){
       const pageSize = 17;
       const generatedRows = [];
+      const footerMergeRows = [];
       const pageCount = Math.max(1, Math.ceil(group.items.length / pageSize));
       for(let page=0; page<pageCount; page++){
         const pageItems = group.items.slice(page * pageSize, (page + 1) * pageSize);
@@ -1086,19 +1087,23 @@ async function downloadSupervisorExcel(){
           generatedRows.push(setCell(cloneRow(subtotalTemplate, subtotalRow), `G${subtotalRow}`, 'n', subtotal));
           generatedRows.push(cloneRow(footerTemplate, subtotalRow + 2));
           generatedRows.push(cloneRow(footerLabelTemplate, subtotalRow + 3));
+          footerMergeRows.push(subtotalRow + 3);
         } else if(firstPage){
           generatedRows.push(cloneRow(footerTemplate, pageStart + 35));
           generatedRows.push(cloneRow(footerLabelTemplate, pageStart + 36));
+          footerMergeRows.push(pageStart + 36);
         } else {
           generatedRows.push(cloneRow(footerTemplate, pageStart + 39));
           generatedRows.push(cloneRow(footerLabelTemplate, pageStart + 40));
+          footerMergeRows.push(pageStart + 40);
         }
       }
       const footerRow = pageCount === 1 ? 42 : 43 + (pageCount - 1) * 40 + 39;
       const preservedRows = [...detailTemplateXml.matchAll(/<row r="([1-4])"[^>]*>[\s\S]*?<\/row>/g)].map(match => match[0]);
       let xml = detailTemplateXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, `<sheetData>${preservedRows.join('')}${generatedRows.join('')}</sheetData>`);
       xml = xml.replace(/<dimension ref="[^"]+"\/>/, `<dimension ref="A1:H${footerRow + 1}"/>`);
-      xml = xml.replace(/A41:H41/g, `A${footerRow + 1}:H${footerRow + 1}`);
+      const mergeCells = footerMergeRows.map(row => `<mergeCell ref="A${row}:H${row}"/>`).join('');
+      xml = xml.replace(/<mergeCells[\s\S]*?<\/mergeCells>/, `<mergeCells count="${footerMergeRows.length}">${mergeCells}</mergeCells>`);
       return xml;
     }
 
