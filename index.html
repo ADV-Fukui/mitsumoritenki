@@ -926,12 +926,17 @@ async function downloadSupervisorExcel(){
       const bodyXml = xml.replace(/^\s*<\?xml[\s\S]*?\?>\s*/, '');
       const doc = xmlParser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${bodyXml}</root>`, 'application/xml');
       if(doc.querySelector('parsererror')) throw new Error(`ExcelシートXMLを読み込めません：${ref}`);
-      const row = doc.documentElement.firstElementChild;
       const cell = Array.from(doc.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'c'))
         .find(candidate => candidate.getAttribute('r') === ref);
+      const rowNumber = ref.match(/\d+$/)?.[0];
+      const row = rowNumber
+        ? Array.from(doc.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'row'))
+          .find(candidate => candidate.getAttribute('r') === rowNumber)
+        : null;
       const target = cell || doc.createElementNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'c');
       if(!cell){
         target.setAttribute('r', ref);
+        if(!row) throw new Error(`Excelシートの行が見つかりません：${ref}`);
         row.appendChild(target);
       }
       Array.from(target.childNodes).forEach(child => target.removeChild(child));
@@ -949,7 +954,8 @@ async function downloadSupervisorExcel(){
         inline.appendChild(text);
         target.appendChild(inline);
       }
-      const serialized = xmlSerializer.serializeToString(row || doc.documentElement)
+      const outputNode = bodyXml.trim().startsWith('<row') ? row : doc.documentElement.firstElementChild;
+      const serialized = xmlSerializer.serializeToString(outputNode || doc.documentElement)
         .replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
       return declaration + serialized;
     }
