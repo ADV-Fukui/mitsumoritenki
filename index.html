@@ -1030,7 +1030,7 @@ async function downloadSupervisorExcel(){
         const pageItems = group.items.slice(page * pageSize, (page + 1) * pageSize);
         const firstPage = page === 0;
         const pageStart = firstPage ? 5 : 43 + (page - 1) * 40;
-        let itemRow = firstPage ? pageStart + 2 : pageStart + 3;
+        let nextItemRow = firstPage ? pageStart + 2 : pageStart + 3;
         if(firstPage){
           generatedRows.push(setCell(cloneRow(headingTemplate, pageStart), `B${pageStart}`, 'is', group.sheet.name || group.sheet.key || '内訳'));
           generatedRows.push(cloneRow(spacerTemplate, pageStart + 1));
@@ -1040,27 +1040,27 @@ async function downloadSupervisorExcel(){
           generatedRows.push(cloneRow(spacerTemplate, pageStart + 2));
         }
         pageItems.forEach((item, itemIndex) => {
-          const row = itemRow;
-          let itemRow = cloneRow(itemTemplate, row);
-          itemRow = setCell(itemRow, `B${row}`, 'is', item.name || '');
-          itemRow = setCell(itemRow, `C${row}`, 'is', item.memo || '');
-          itemRow = setCell(itemRow, `D${row}`, 'n', +item.qty || 1);
-          itemRow = setCell(itemRow, `E${row}`, 'is', item.unit || '式');
-          itemRow = setCell(itemRow, `F${row}`, 'n', +item.unitPrice || 0);
-          itemRow = setCell(itemRow, `G${row}`, 'n', +item.amount || 0);
-          itemRow = setCell(itemRow, `H${row}`, 'is', item.vendor || '');
-          generatedRows.push(itemRow);
+          const row = nextItemRow;
+          let itemXml = cloneRow(itemTemplate, row);
+          itemXml = setCell(itemXml, `B${row}`, 'is', item.name || '');
+          itemXml = setCell(itemXml, `C${row}`, 'is', item.memo || '');
+          itemXml = setCell(itemXml, `D${row}`, 'n', +item.qty || 1);
+          itemXml = setCell(itemXml, `E${row}`, 'is', item.unit || '式');
+          itemXml = setCell(itemXml, `F${row}`, 'n', +item.unitPrice || 0);
+          itemXml = setCell(itemXml, `G${row}`, 'n', +item.amount || 0);
+          itemXml = setCell(itemXml, `H${row}`, 'is', item.vendor || '');
+          generatedRows.push(itemXml);
           if(!firstPage || itemIndex < pageSize - 1){
             generatedRows.push(cloneRow(spacerTemplate, row + 1));
           }
-          itemRow += 2;
+          nextItemRow += 2;
         });
         for(let i=pageItems.length; i<pageSize; i++){
-          generatedRows.push(cloneRow(itemTemplate, itemRow));
+          generatedRows.push(cloneRow(itemTemplate, nextItemRow));
           if(!firstPage || i < pageSize - 1){
-            generatedRows.push(cloneRow(spacerTemplate, itemRow + 1));
+            generatedRows.push(cloneRow(spacerTemplate, nextItemRow + 1));
           }
-          itemRow += 2;
+          nextItemRow += 2;
         }
         if(page === pageCount - 1){
           const subtotalRow = firstPage ? pageStart + 35 : pageStart + 37;
