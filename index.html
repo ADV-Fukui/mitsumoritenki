@@ -920,9 +920,9 @@ async function downloadSupervisorExcel(){
     }
     function setCell(xml, ref, type, value){
       const safeRef = ref.replace(/[.*+?^=!:${}()|[\]\\]/g,'\\$&');
-      const cellRe = new RegExp(`<c r="${safeRef}"([^>]*)>([\\s\\S]*?)</c>|<c r="${safeRef}"([^>]*)\\/>`);
+      const cellRe = new RegExp(`<c([^>]*\\sr="${safeRef}"[^>]*)(?:>[\\s\\S]*?</c>|\\s*/>)`);
       const match = xml.match(cellRe);
-      const attrs = match ? (match[1] || match[3] || '') : '';
+      const attrs = match ? match[1] : '';
       const style = (attrs.match(/s="[^"]+"/) || [''])[0];
       let body = `<c r="${ref}" ${style}`;
       if (type === 'n') body += `><v>${Number(value) || 0}</v></c>`;
