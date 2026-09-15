@@ -914,6 +914,8 @@ async function downloadSupervisorExcel(){
       vendor: String(item.vendor || '')
     }));
     const total = exportItems.reduce((sum, item) => sum + item.amount, 0);
+    const xmlParser = new DOMParser();
+    const xmlSerializer = new XMLSerializer();
 
     function escapeXml(value){
       return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -1000,8 +1002,6 @@ async function downloadSupervisorExcel(){
     const detailTemplatePath = sheetPath('内訳書');
     if (!detailTemplatePath) throw new Error('テンプレートに「内訳書」シートがありません');
     const detailTemplateXml = await readText(detailTemplatePath);
-    const xmlParser = new DOMParser();
-    const xmlSerializer = new XMLSerializer();
     const detailDoc = xmlParser.parseFromString(detailTemplateXml, 'application/xml');
     if (detailDoc.querySelector('parsererror')) throw new Error('内訳書テンプレートのXMLを読み込めません');
     const rowXml = rowNumber => {
