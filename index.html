@@ -920,19 +920,32 @@ async function downloadSupervisorExcel(){
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
     function setCell(xml, ref, type, value){
-      const safeRef = ref.replace(/[.*+?^=!:${}()|[\]\\]/g,'\\$&');
-      const cellRe = new RegExp(`<c([^>]*\\sr="${safeRef}"[^>]*)(?:>[\\s\\S]*?</c>|\\s*/>)`);
-      const match = xml.match(cellRe);
-      const attrs = match ? match[1] : '';
-      const style = (attrs.match(/s="[^"]+"/) || [''])[0];
-      let body = `<c r="${ref}" ${style}`;
-      if (type === 'n') body += `><v>${Number(value) || 0}</v></c>`;
-      else body += ` t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
-      if (match) return xml.replace(cellRe, body);
-      const row = ref.match(/^(.*?)(\d+)$/)[2];
-      const rowRe = new RegExp(`<row r="${row}"([^>]*)>([\\s\\S]*?)</row>`);
-      return xml.replace(rowRe, (full, rowAttrs, cells) =>
-        `<row r="${row}"${rowAttrs}>${cells}${body}</row>`);
+      const doc = xmlParser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${xml}</root>`, 'application/xml');
+      const row = doc.documentElement.firstElementChild;
+      const cell = Array.from(doc.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'c'))
+        .find(candidate => candidate.getAttribute('r') === ref);
+      const target = cell || doc.createElementNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'c');
+      if(!cell){
+        target.setAttribute('r', ref);
+        row.appendChild(target);
+      }
+      Array.from(target.childNodes).forEach(child => target.removeChild(child));
+      target.removeAttribute('t');
+      if(type === 'n'){
+        const valueNode = doc.createElementNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'v');
+        valueNode.textContent = String(Number(value) || 0);
+        target.appendChild(valueNode);
+      } else {
+        target.setAttribute('t', 'inlineStr');
+        const inline = doc.createElementNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'is');
+        const text = doc.createElementNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 't');
+        text.setAttribute('xml:space', 'preserve');
+        text.textContent = String(value ?? '');
+        inline.appendChild(text);
+        target.appendChild(inline);
+      }
+      return xmlSerializer.serializeToString(row || doc.documentElement)
+        .replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
     }
     async function readText(path){
       const file = zip.file(path);
@@ -998,9 +1011,15 @@ async function downloadSupervisorExcel(){
       return xmlSerializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
     };
     const cloneRow = (source, target) => {
-      let row = source.replace(/(<row\b[^>]*\sr=")[0-9]+("[^>]*>)/, `$1${target}$2`);
-      row = row.replace(/(<c\b[^>]*\sr=")([A-Z]+)[0-9]+("[^>]*>)/g, `$1$2${target}$3`);
-      return row;
+      const doc = xmlParser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${source}</root>`, 'application/xml');
+      const row = doc.documentElement.firstElementChild;
+      if(!row || row.localName !== 'row') throw new Error('テンプレートの行を複製できません');
+      row.setAttribute('r', String(target));
+      Array.from(row.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'c')).forEach(cell => {
+        const ref = cell.getAttribute('r');
+        if(ref) cell.setAttribute('r', ref.replace(/\d+$/, String(target)));
+      });
+      return xmlSerializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
     };
     const headingTemplate = rowXml(5);
     const spacerTemplate = rowXml(6);
@@ -1086,7 +1105,7 @@ async function downloadSupervisorExcel(){
     const existingSheetIds = [...workbookXml.matchAll(/<sheet name="[^"]+"[^>]*sheetId="(\d+)"/g)].map(match => match[1]);
     const detailSheetId = workbookXml.match(new RegExp(`<sheet name="内訳書"[^>]*sheetId="(\\d+)"`))?.[1] || '1';
     const nextSheetId = maxNumber(existingSheetIds, 0) + 1;
-    const existingRelIds = Object.keys(relationPaths).map(id => id.replace('rId',''));
+    const existingRelIds = [...relsXml.matchAll(/Id="rId(\d+)"/g)].map(match => match[1]);
     const nextRelNumber = maxNumber(existingRelIds, 0) + 1;
     const existingSheetPaths = Object.values(relationPaths);
     const nextSheetNumber = maxNumber(existingSheetPaths.map(path => path.match(/sheet(\d+)\.xml$/)?.[1]), 0) + 1;
