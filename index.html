@@ -906,6 +906,7 @@ async function downloadSupervisorExcel(){
     const kojiPlace = document.getElementById('kojiPlace').value || '';
     const kojiClient = document.getElementById('kojiClient').value || '';
     const estNo = document.getElementById('estNo').value || '';
+    const disc = Number(document.getElementById('discount').value) || 0;
     const exportItems = items.map(item => ({
       ...item,
       name: String(item.name || ''),
