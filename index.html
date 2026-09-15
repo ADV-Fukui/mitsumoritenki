@@ -179,6 +179,14 @@ td input:focus,td select:focus{outline:none;border-color:#999}
       <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
         <button class="btn" onclick="addItem()">＋ 行を追加</button>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:10px;background:#f5f5f0;border:1px solid #e0dfd8;border-radius:8px">
+        <span style="font-size:12px;color:#666">選択行を</span>
+        <select id="bulkMoveSheet" style="width:auto;font-size:12px;padding:5px 8px">
+          <option value="">移動先シートを選択</option>
+        </select>
+        <button class="btn" onclick="moveSelectedItems()">まとめてシート移動</button>
+        <button class="btn" onclick="clearItemSelection()">選択解除</button>
+      </div>
       <div class="alert-row" id="rowAlert">
         ⚠️ 標準搭載の雛形を使用する場合、内訳ごとに<strong>30行まで</strong>の転記となりますので、31行目以降を「コンクリート２」などとして大項目を追加してください。
       </div>
@@ -186,6 +194,7 @@ td input:focus,td select:focus{outline:none;border-color:#999}
         <table class="item-table estimate-item-table">
           <thead>
             <tr>
+              <th style="width:34px">選択</th>
               <th style="width:24px">#</th>
               <th style="width:205px">名称</th>
               <th style="width:175px">摘要</th>
@@ -512,6 +521,16 @@ function removeSheet(i){ sheets.splice(i,1); renderSheetNames(); }
 // --- Item Table ---
 function renderSheetTabs(){
   const c = document.getElementById('sheetTabs'); c.innerHTML = '';
+  const bulkSelect = document.getElementById('bulkMoveSheet');
+  if(bulkSelect){
+    bulkSelect.innerHTML = '<option value="">移動先シートを選択</option>';
+    sheets.forEach(s=>{
+      const option = document.createElement('option');
+      option.value = s.key;
+      option.textContent = `${s.key}：${s.name}`;
+      bulkSelect.appendChild(option);
+    });
+  }
   sheets.forEach(s=>{
     const si = items.filter(it=>it.sheet===s.key);
     const btn = document.createElement('button');
@@ -536,6 +555,7 @@ function renderItemTable(){
     const sheetOpts = sheets.map(s=>`<option value="${s.key}"${it.sheet===s.key?' selected':''}>${s.key}:${esc(s.name)}</option>`).join('');
     const qtyVal = (+(it.qty||0)).toFixed(2);
     tr.innerHTML = `
+      <td style="text-align:center"><input type="checkbox" class="item-select" data-item-index="${gi}" onchange="updateSelectedCount()"></td>
       <td style="text-align:center;color:#bbb;font-size:11px">${si+1}</td>
       <td><input type="text" value="${esc(it.name)}" oninput="items[${gi}].name=this.value"></td>
       <td><input type="text" value="${esc(it.memo)}" oninput="items[${gi}].memo=this.value"></td>
@@ -554,7 +574,13 @@ function renderItemTable(){
         </div>
       </td>
       <td><span class="badge ${badgeClass}">${badgeText}</span></td>
-      <td><button class="btn soft-danger" style="padding:3px 7px;font-size:11px" onclick="removeItem(${gi})">削除</button></td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <button class="move-btn" onclick="insertItem(${gi},-1)" title="この行の上に追加">＋上</button>
+          <button class="move-btn" onclick="insertItem(${gi},1)" title="この行の下に追加">＋下</button>
+          <button class="btn soft-danger" style="padding:3px 7px;font-size:11px" onclick="removeItem(${gi})">削除</button>
+        </div>
+      </td>
     `;
     tbody.appendChild(tr);
   });
@@ -575,10 +601,23 @@ function moveItemSheet(gi, newSheet){
 function addItem(){
   if(!activeSheet && sheets.length) activeSheet = sheets[0].key;
   if(!activeSheet) return;
-  items.push({
+  items.push(createBlankItem(activeSheet));
+  renderSheetTabs();
+  renderItemTable();
+  updateTotals();
+}
+
+function createBlankItem(sheetKey){
+  return {
     name:'', memo:'', qty:1, unit:'式', unitPrice:0, amount:0,
-    sheet:activeSheet, vendor:'', status:'ok', sellPrice:0, profitRate:20
-  });
+    sheet:sheetKey, vendor:'', status:'ok', sellPrice:0, profitRate:20
+  };
+}
+
+function insertItem(gi, direction){
+  const target = items[gi];
+  if(!target) return;
+  items.splice(gi + (direction > 0 ? 1 : 0), 0, createBlankItem(target.sheet));
   renderSheetTabs();
   renderItemTable();
   updateTotals();
@@ -587,6 +626,30 @@ function addItem(){
 function removeItem(gi){
   if(!items[gi]) return;
   items.splice(gi, 1);
+  renderSheetTabs();
+  renderItemTable();
+  updateTotals();
+}
+
+function updateSelectedCount(){
+  const count = document.querySelectorAll('.item-select:checked').length;
+  const button = document.querySelector('[onclick="moveSelectedItems()"]');
+  if(button) button.textContent = count ? `${count}行をまとめて移動` : 'まとめてシート移動';
+}
+
+function clearItemSelection(){
+  document.querySelectorAll('.item-select:checked').forEach(input=>{ input.checked = false; });
+  updateSelectedCount();
+}
+
+function moveSelectedItems(){
+  const destination = document.getElementById('bulkMoveSheet')?.value;
+  const selected = Array.from(document.querySelectorAll('.item-select:checked'))
+    .map(input=>+input.dataset.itemIndex)
+    .filter(Number.isInteger);
+  if(!destination){ alert('移動先シートを選択してください'); return; }
+  if(!selected.length){ alert('移動する行を選択してください'); return; }
+  selected.forEach(gi=>{ if(items[gi]) items[gi].sheet = destination; });
   renderSheetTabs();
   renderItemTable();
   updateTotals();
