@@ -194,7 +194,7 @@ td input:focus,td select:focus{outline:none;border-color:#999}
         <table class="item-table estimate-item-table">
           <thead>
             <tr>
-              <th style="width:34px">選択</th>
+              <th style="width:50px"><label style="display:flex;align-items:center;justify-content:center;gap:3px;margin:0;font-size:11px;color:#888"><input type="checkbox" id="selectAllItems" onchange="toggleAllItems(this.checked)">全選択</label></th>
               <th style="width:24px">#</th>
               <th style="width:205px">名称</th>
               <th style="width:175px">摘要</th>
@@ -588,6 +588,7 @@ function renderItemTable(){
   // 31行アラート
   const alert = document.getElementById('rowAlert');
   if(alert) alert.style.display = sheetItems.length>=31?'block':'none';
+  updateSelectedCount();
 }
 
 function moveItemSheet(gi, newSheet){
@@ -632,9 +633,20 @@ function removeItem(gi){
 }
 
 function updateSelectedCount(){
-  const count = document.querySelectorAll('.item-select:checked').length;
+  const inputs = Array.from(document.querySelectorAll('.item-select'));
+  const count = inputs.filter(input=>input.checked).length;
   const button = document.querySelector('[onclick="moveSelectedItems()"]');
   if(button) button.textContent = count ? `${count}行をまとめて移動` : 'まとめてシート移動';
+  const selectAll = document.getElementById('selectAllItems');
+  if(selectAll){
+    selectAll.checked = inputs.length > 0 && count === inputs.length;
+    selectAll.indeterminate = count > 0 && count < inputs.length;
+  }
+}
+
+function toggleAllItems(checked){
+  document.querySelectorAll('.item-select').forEach(input=>{ input.checked = checked; });
+  updateSelectedCount();
 }
 
 function clearItemSelection(){
@@ -977,10 +989,10 @@ async function downloadSupervisorExcel(){
     const subtotalTemplate = rowXml(37);
     const footerTemplate = rowXml(40);
     const footerLabelTemplate = rowXml(41);
-    const groupedItems = sheets.flatMap(sheet => {
-      const sheetItems = items.filter(item => item.sheet === sheet.key);
-      return sheetItems.length ? [{sheet, items:sheetItems}] : [];
-    });
+    const groupedItems = sheets.map(sheet => ({
+      sheet,
+      items: items.filter(item => item.sheet === sheet.key)
+    }));
     const assigned = new Set(groupedItems.flatMap(group => group.items));
     const ungrouped = items.filter(item => !assigned.has(item));
     if (ungrouped.length) groupedItems.push({sheet:{key:'', name:'その他'}, items:ungrouped});
