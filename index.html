@@ -998,15 +998,9 @@ async function downloadSupervisorExcel(){
       return xmlSerializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
     };
     const cloneRow = (source, target) => {
-      const doc = xmlParser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${source}</root>`, 'application/xml');
-      const row = doc.documentElement.firstElementChild;
-      if (!row || row.tagName !== 'row') throw new Error('テンプレートの行を複製できません');
-      row.setAttribute('r', String(target));
-      row.querySelectorAll('c[r]').forEach(cell => {
-        const match = cell.getAttribute('r').match(/^([A-Z]+)/);
-        if (match) cell.setAttribute('r', `${match[1]}${target}`);
-      });
-      return xmlSerializer.serializeToString(row).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
+      let row = source.replace(/(<row\b[^>]*\sr=")[0-9]+("[^>]*>)/, `$1${target}$2`);
+      row = row.replace(/(<c\b[^>]*\sr=")([A-Z]+)[0-9]+("[^>]*>)/g, `$1$2${target}$3`);
+      return row;
     };
     const headingTemplate = rowXml(5);
     const spacerTemplate = rowXml(6);
