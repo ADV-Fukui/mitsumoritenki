@@ -959,6 +959,7 @@ async function downloadSupervisorExcel(){
       }
       const outputNode = isRowFragment ? row : doc.documentElement;
       const serialized = xmlSerializer.serializeToString(outputNode || doc.documentElement)
+        .replace(/^\s*<\?xml[\s\S]*?\?>\s*/, '')
         .replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
       return declaration + serialized;
     }
