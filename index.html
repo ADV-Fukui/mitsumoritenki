@@ -1152,24 +1152,50 @@ async function downloadSupervisorExcel(){
         .find(row => row.getAttribute('r') === '11');
       if(summaryRowTemplate){
         const summaryRowXml = xmlSerializer.serializeToString(summaryRowTemplate).replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
-        const summaryRows = groupedItems.map((group, index) => {
-          const row = 11 + index;
-          const subtotal = group.items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+        const summaryRows = [];
+        const clearSummaryRow = row => {
           let rowXml = cloneRow(summaryRowXml, row);
+          ['A','B','C','D','E','F','G','H'].forEach(col => {
+            rowXml = setCell(rowXml, `${col}${row}`, 'is', '');
+          });
+          return rowXml;
+        };
+        for(let row=11; row<=39; row++) summaryRows.push(clearSummaryRow(row));
+        groupedItems.forEach((group, index) => {
+          const row = 11 + index * 2;
+          const subtotal = group.items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+          let rowXml = clearSummaryRow(row);
           rowXml = setCell(rowXml, `A${row}`, 'is', String(index + 1));
           rowXml = setCell(rowXml, `B${row}`, 'is', group.sheet.name || group.sheet.key || '内訳');
           rowXml = setCell(rowXml, `D${row}`, 'n', 1);
           rowXml = setCell(rowXml, `E${row}`, 'is', '式');
           rowXml = setCell(rowXml, `G${row}`, 'n', subtotal);
-          return rowXml;
+          summaryRows[row - 11] = rowXml;
         });
-        const totalRow = 11 + groupedItems.length;
-        let totalXml = cloneRow(summaryRowXml, totalRow);
+        const lastSummaryItemRow = 11 + (groupedItems.length - 1) * 2;
+        const directCostRow = lastSummaryItemRow + 2;
+        const discountRow = directCostRow + 2;
+        const totalRow = discountRow + 2;
+        let directCostXml = clearSummaryRow(directCostRow);
+        directCostXml = setCell(directCostXml, `B${directCostRow}`, 'is', '直接工事費 計');
+        directCostXml = setCell(directCostXml, `G${directCostRow}`, 'n', total);
+        let discountXml = clearSummaryRow(discountRow);
+        discountXml = setCell(discountXml, `B${discountRow}`, 'is', '出精値引き');
+        discountXml = setCell(discountXml, `D${discountRow}`, 'n', 1);
+        discountXml = setCell(discountXml, `E${discountRow}`, 'is', '式');
+        discountXml = setCell(discountXml, `G${discountRow}`, 'n', -Math.abs(disc));
+        let totalXml = clearSummaryRow(totalRow);
         totalXml = setCell(totalXml, `B${totalRow}`, 'is', '合計');
-        totalXml = setCell(totalXml, `G${totalRow}`, 'n', total);
+        totalXml = setCell(totalXml, `G${totalRow}`, 'n', total - Math.abs(disc));
+        summaryRows[directCostRow - 11] = directCostXml;
+        summaryRows[discountRow - 11] = discountXml;
+        summaryRows[totalRow - 11] = totalXml;
+        const originalRows = [...summaryXml.matchAll(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g)]
+          .filter(match => Number(match[1]) >= 40)
+          .map(match => match[0]);
         summaryXml = summaryXml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, match => {
           const headerRows = [...match.matchAll(/<row r="([1-9]|10)"[^>]*>[\s\S]*?<\/row>/g)].map(row => row[0]);
-          return `<sheetData>${headerRows.join('')}${summaryRows.join('')}${totalXml}</sheetData>`;
+          return `<sheetData>${headerRows.join('')}${summaryRows.join('')}${originalRows.join('')}</sheetData>`;
         });
         writeText(summaryPath, summaryXml);
       }
