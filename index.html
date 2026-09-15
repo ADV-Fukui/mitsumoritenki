@@ -176,6 +176,9 @@ td input:focus,td select:focus{outline:none;border-color:#999}
         <span style="background:#fff0e0;color:#c05000;font-size:11px;padding:2px 7px;border-radius:4px;font-weight:600;margin-left:8px">🟠 重複候補</span>　複数社で類似項目あり
       </p>
       <div class="sheet-tabs" id="sheetTabs"></div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <button class="btn" onclick="addItem()">＋ 行を追加</button>
+      </div>
       <div class="alert-row" id="rowAlert">
         ⚠️ 標準搭載の雛形を使用する場合、内訳ごとに<strong>30行まで</strong>の転記となりますので、31行目以降を「コンクリート２」などとして大項目を追加してください。
       </div>
@@ -194,6 +197,7 @@ td input:focus,td select:focus{outline:none;border-color:#999}
               <th style="width:80px">シート移動</th>
               <th style="width:44px">上下</th>
               <th style="width:64px">状態</th>
+              <th style="width:52px">操作</th>
             </tr>
           </thead>
           <tbody id="itemBody"></tbody>
@@ -550,6 +554,7 @@ function renderItemTable(){
         </div>
       </td>
       <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+      <td><button class="btn soft-danger" style="padding:3px 7px;font-size:11px" onclick="removeItem(${gi})">削除</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -562,6 +567,26 @@ function renderItemTable(){
 function moveItemSheet(gi, newSheet){
   items[gi].sheet = newSheet;
   // activeSheetは変えない（元のシートに留まる）
+  renderSheetTabs();
+  renderItemTable();
+  updateTotals();
+}
+
+function addItem(){
+  if(!activeSheet && sheets.length) activeSheet = sheets[0].key;
+  if(!activeSheet) return;
+  items.push({
+    name:'', memo:'', qty:1, unit:'式', unitPrice:0, amount:0,
+    sheet:activeSheet, vendor:'', status:'ok', sellPrice:0, profitRate:20
+  });
+  renderSheetTabs();
+  renderItemTable();
+  updateTotals();
+}
+
+function removeItem(gi){
+  if(!items[gi]) return;
+  items.splice(gi, 1);
   renderSheetTabs();
   renderItemTable();
   updateTotals();
