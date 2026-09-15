@@ -922,7 +922,10 @@ async function downloadSupervisorExcel(){
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
     }
     function setCell(xml, ref, type, value){
-      const doc = xmlParser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${xml}</root>`, 'application/xml');
+      const declaration = (xml.match(/^\s*<\?xml[\s\S]*?\?>/) || [''])[0];
+      const bodyXml = xml.replace(/^\s*<\?xml[\s\S]*?\?>\s*/, '');
+      const doc = xmlParser.parseFromString(`<root xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${bodyXml}</root>`, 'application/xml');
+      if(doc.querySelector('parsererror')) throw new Error(`ExcelシートXMLを読み込めません：${ref}`);
       const row = doc.documentElement.firstElementChild;
       const cell = Array.from(doc.getElementsByTagNameNS('http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'c'))
         .find(candidate => candidate.getAttribute('r') === ref);
@@ -946,8 +949,9 @@ async function downloadSupervisorExcel(){
         inline.appendChild(text);
         target.appendChild(inline);
       }
-      return xmlSerializer.serializeToString(row || doc.documentElement)
+      const serialized = xmlSerializer.serializeToString(row || doc.documentElement)
         .replace(/^<row[^>]*xmlns="[^"]+"/, match => match.replace(/ xmlns="[^"]+"/, ''));
+      return declaration + serialized;
     }
     async function readText(path){
       const file = zip.file(path);
