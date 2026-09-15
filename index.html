@@ -895,9 +895,12 @@ async function downloadExcel(){
 // --- 監督見積Excel ---
 async function downloadSupervisorExcel(){
   if (!items.length) { alert('明細項目がありません'); return; }
+  let supervisorStage = '開始';
   try {
+    supervisorStage = 'テンプレート取得';
     const templateResp = await fetch(encodeURI('/見積書標準書式.xlsx'));
     if (!templateResp.ok) throw new Error('監督見積用テンプレートを取得できませんでした');
+    supervisorStage = 'テンプレート展開';
     const zip = await JSZip.loadAsync(await templateResp.arrayBuffer());
     const kojiName = document.getElementById('kojiName').value || '見積書';
     const kojiPlace = document.getElementById('kojiPlace').value || '';
@@ -1000,6 +1003,7 @@ async function downloadSupervisorExcel(){
       return candidate;
     }
 
+    supervisorStage = '表紙転記';
     const coverPath = sheetPath('表紙');
     if (coverPath) {
       let xml = await readText(coverPath);
@@ -1013,6 +1017,7 @@ async function downloadSupervisorExcel(){
       writeText(coverPath, xml);
     }
 
+    supervisorStage = '内訳書テンプレート読込';
     const detailTemplatePath = sheetPath('内訳書');
     if (!detailTemplatePath) throw new Error('テンプレートに「内訳書」シートがありません');
     const detailTemplateXml = await readText(detailTemplatePath);
@@ -1132,6 +1137,7 @@ async function downloadSupervisorExcel(){
     let workbookOut = workbookXml;
     let relsOut = relsXml;
     const outputSheetNames = [];
+    supervisorStage = '内訳書シート作成';
     groupedItems.forEach((group, index) => {
       const outputName = uniqueSheetName(group.sheet.name || group.sheet.key || '内訳', existingNames);
       outputSheetNames.push(outputName);
@@ -1154,6 +1160,7 @@ async function downloadSupervisorExcel(){
     workbookOut = workbookOut.replace(/内訳書!/g, `${escapeXml(outputSheetNames[0])}!`);
 
     // 総括表は工種ごとの合計を1行ずつ出力する。
+    supervisorStage = '総括表転記';
     const summaryPath = sheetPath('総括表');
     if(summaryPath){
       let summaryXml = await readText(summaryPath);
@@ -1214,6 +1221,7 @@ async function downloadSupervisorExcel(){
     writeText('xl/_rels/workbook.xml.rels', relsOut);
     writeText('[Content_Types].xml', contentTypesXml);
 
+    supervisorStage = 'Excel生成';
     const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1222,7 +1230,8 @@ async function downloadSupervisorExcel(){
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (error) {
-    alert('監督見積用Excelの作成でエラーが発生しました：' + error.message);
+    console.error('監督見積Excel出力エラー', supervisorStage, error);
+    alert(`監督見積用Excelの作成でエラーが発生しました（${supervisorStage}）：${error.message}`);
   }
 }
 
