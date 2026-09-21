@@ -60,6 +60,13 @@ td input:focus,td select:focus{outline:none;border-color:#999}
 .estimate-item-table td:nth-child(6) input{min-width:42px}
 .estimate-item-table td:nth-child(7) input{min-width:100px}
 .estimate-item-table td:nth-child(8) input{min-width:112px}
+.profit-table{table-layout:fixed;width:auto;min-width:760px}
+.profit-table th:nth-child(1),.profit-table td:nth-child(1){width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profit-table th:nth-child(2),.profit-table td:nth-child(2){width:240px}
+.profit-table th:nth-child(3),.profit-table td:nth-child(3){width:110px}
+.profit-table th:nth-child(4),.profit-table td:nth-child(4){width:70px}
+.profit-table th:nth-child(5),.profit-table td:nth-child(5){width:130px}
+.profit-table th:nth-child(6),.profit-table td:nth-child(6){width:60px}
 .badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;white-space:nowrap;display:inline-block}
 .badge.ok{background:#eaf7f1;color:#1a7a4a}
 .badge.warn{background:#fff8d6;color:#c07700}
@@ -261,15 +268,15 @@ td input:focus,td select:focus{outline:none;border-color:#999}
       <p class="card-title">小項目別確認・手修正</p>
       <p class="card-sub">売価を個別に修正できます。</p>
       <div style="overflow-x:auto">
-        <table class="item-table">
+        <table class="item-table profit-table">
           <thead>
             <tr>
               <th>シート</th>
-              <th style="width:150px">名称</th>
-              <th style="width:90px">原価</th>
-              <th style="width:60px">率%</th>
-              <th style="width:100px">売価</th>
-              <th style="width:60px">状態</th>
+              <th>名称</th>
+              <th>原価</th>
+              <th>率%</th>
+              <th>売価</th>
+              <th>状態</th>
             </tr>
           </thead>
           <tbody id="profitBody"></tbody>
@@ -494,6 +501,7 @@ async function runExtract(){
     });
     sheets = Array.from(sheetMap.values());
     items = mergedItems.map(it=>({...it, sellPrice:+(it.amount||0), profitRate:20}));
+    applyGlobalRate();
     document.getElementById('loadingBox').classList.add('hidden');
     goStep(2);
   } catch(e){
@@ -755,7 +763,7 @@ function renderProfitTable(){
     const tr = document.createElement('tr');
     const badgeClass = it.status==='dup'?'dup':it.status==='warn'?'warn':'ok';
     tr.innerHTML = `
-      <td style="font-size:11px;color:#888">${it.sheet}:${s?esc(s.name):''}</td>
+      <td style="font-size:11px;color:#888" title="${it.sheet}:${s?esc(s.name):''}">${it.sheet}:${s?esc(s.name):''}</td>
       <td style="font-size:12px">${esc(it.name)}</td>
       <td style="text-align:right;font-size:12px;white-space:nowrap">¥${fmt(it.amount)}</td>
       <td><input type="number" value="${it.profitRate||0}" step="0.1" oninput="updateItemProfit(${gi},+this.value)"></td>
