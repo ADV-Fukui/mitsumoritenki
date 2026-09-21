@@ -923,9 +923,10 @@ async function downloadSupervisorExcel(){
       unit: String(item.unit || ''),
       unitPrice: Number(item.unitPrice) || 0,
       amount: Number(item.amount) || 0,
+      sell: Number(item.sellPrice) || Number(item.amount) || 0,
       vendor: String(item.vendor || '')
     }));
-    const total = exportItems.reduce((sum, item) => sum + item.amount, 0);
+    const total = exportItems.reduce((sum, item) => sum + item.sell, 0);
     const xmlParser = new DOMParser();
     const xmlSerializer = new XMLSerializer();
 
@@ -1089,8 +1090,8 @@ async function downloadSupervisorExcel(){
           itemXml = setCell(itemXml, `C${row}`, 'is', item.memo || '');
           itemXml = setCell(itemXml, `D${row}`, 'n', +item.qty || 1);
           itemXml = setCell(itemXml, `E${row}`, 'is', item.unit || '式');
-          itemXml = setCell(itemXml, `F${row}`, 'n', +item.unitPrice || 0);
-          itemXml = setCell(itemXml, `G${row}`, 'n', +item.amount || 0);
+          itemXml = setCell(itemXml, `F${row}`, 'n', item.qty ? roundTo(item.sell/item.qty, 1) : 0);
+          itemXml = setCell(itemXml, `G${row}`, 'n', +item.sell || 0);
           itemXml = setCell(itemXml, `H${row}`, 'is', item.vendor || '');
           generatedRows.push(itemXml);
           if(!firstPage || itemIndex < pageSize - 1){
@@ -1107,7 +1108,7 @@ async function downloadSupervisorExcel(){
         }
         if(page === pageCount - 1){
           const subtotalRow = firstPage ? pageStart + 35 : pageStart + 37;
-          const subtotal = group.items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+          const subtotal = group.items.reduce((sum, item) => sum + (+item.sell || 0), 0);
           generatedRows.push(setCell(cloneRow(subtotalTemplate, subtotalRow), `G${subtotalRow}`, 'n', subtotal));
           generatedRows.push(cloneRow(footerTemplate, subtotalRow + 2));
           generatedRows.push(cloneRow(footerLabelTemplate, subtotalRow + 3));
@@ -1189,7 +1190,7 @@ async function downloadSupervisorExcel(){
         for(let row=11; row<=39; row++) summaryRows.push(clearSummaryRow(row));
         groupedItems.forEach((group, index) => {
           const row = 11 + index * 2;
-          const subtotal = group.items.reduce((sum, item) => sum + (+item.amount || 0), 0);
+          const subtotal = group.items.reduce((sum, item) => sum + (+item.sell || 0), 0);
           let rowXml = clearSummaryRow(row);
           rowXml = setCell(rowXml, `A${row}`, 'is', String(index + 1));
           rowXml = setCell(rowXml, `B${row}`, 'is', group.sheet.name || group.sheet.key || '内訳');
