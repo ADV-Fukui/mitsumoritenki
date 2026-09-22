@@ -433,6 +433,7 @@ function formatExtractError(error){
 
 async function runExtract(){
   if(!files.length){ showErr('ファイルをアップロードしてください'); return; }
+  fetch('/api/logUsage', { method:'POST' }).catch(()=>{});
   document.getElementById('errBox').style.display = 'none';
   document.getElementById('loadingBox').classList.remove('hidden');
   document.getElementById('loadingMsg').textContent = 'AIが見積書を読み取っています...';
