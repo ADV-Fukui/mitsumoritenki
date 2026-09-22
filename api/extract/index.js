@@ -42,6 +42,10 @@ module.exports = async function (context, req) {
         timestamp: new Date().toISOString()
       }
     });
+    // Azure Functionsはレスポンス返却後にプロセスが一時停止されることがあり、
+    // SDKの内部バッチ送信(既定15秒間隔)を待たずに記録が失われる場合があるため、
+    // ここで明示的にflushして送信完了を待つ。
+    await new Promise((resolve) => appInsights.defaultClient.flush({ callback: resolve }));
   }
 
   try {
